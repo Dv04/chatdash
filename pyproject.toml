@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chatdash"
+version = "0.1.0"
+description = "A local dashboard for every Claude Code chat across your config dirs."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Dev Sanghvi" }]
+keywords = ["claude-code", "dashboard", "local"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Topic :: Software Development",
+]
+dependencies = []          # standard library only
+
+[project.scripts]
+chatdash = "chatdash.server:main"
+chatdash-ask-hook = "chatdash.cp.hooks.ask_hook:cli"
+chatdash-stop-hook = "chatdash.cp.hooks.stop_hook:cli"
+
+[tool.setuptools]
+packages = ["chatdash", "chatdash.cp", "chatdash.cp.hooks"]
+
+[tool.setuptools.package-data]
+chatdash = ["ui/*", "ui/js/*", "ui/css/*", "static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff.lint]
+# the code base keeps short one-line helpers and lambdas on purpose
+ignore = ["E702", "E731", "E741"]

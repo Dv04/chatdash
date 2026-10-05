@@ -1,0 +1,18 @@
+{
+  "seat_labels": { "work": "Work account" },
+  "read_only_accounts": [],
+  "work_item_pattern": "PROJ-\\d+",
+  "evidence_gate_work_items": [],
+  "default_cwd": "~",
+  "launchd_prefix": "com.chatdash",
+  "timezone": "",
+  "public_url": "",
+  "meter_log": "",
+  "limit_resume": "dry-run",
+  "decision_hook": "dry-run",
+  "stop_gate": "dry-run",
+  "shadow_drafts": "dry-run",
+  "corrections": "dry-run",
+  "handoff": "dry-run",
+  "idle_compact": "dry-run"
+}

@@ -1,0 +1,39 @@
+# secrets and runtime data (these live in ~/.config/chatdash by default, never in the repo)
+.token
+public.json
+config.json
+meter.log
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.log
+logs/
+run/
+
+# backups and editor leftovers
+*.bak
+*.bak-*
+*.bak.*
+cp.bak-*/
+.bak-*/
+.DS_Store
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.benchmarks/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# UI acceptance output
+tools/acceptance/final/
+tools/acceptance/REPORT.md
+tools/acceptance/.specs.json
+tools/acceptance/s[0-9]*/
+*.png
+*.jpg
+*.jpeg

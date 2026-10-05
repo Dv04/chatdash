@@ -1,0 +1,606 @@
+/* Nebula look, stage 1: the board as three glass windows over a live field of real fleet data.
+   Applies only with :root[data-look="nebula"]; every other view keeps app.css as is.
+   Tokens: --nb-* are the field (canvas reads them), --glass* the windows. Contrast: acceptance/contrast.py
+   composites every glass and chip token over each field colour, both themes. Dark is the crafted theme. */
+:root {
+  /* light: a correct, readable twin (not polished in stage 1) */
+  --nb-void: oklch(93.5% 0.03 250);           /* Night window: a pale sky-blue page */
+  --nb-void-2: oklch(97.5% 0.022 235);
+  --nb-seat: oklch(50% 0.16 268);
+  --nb-seat-2: oklch(48% 0.1 215);
+  --nb-out-2: oklch(50% 0.16 30);
+  --nb-ink: oklch(30% 0.12 268);
+  --nb-out: oklch(52% 0.2 355);
+  --nb-unk: oklch(50% 0.12 70);
+  --nb-chat: oklch(46% 0.14 250);
+  --nb-need: oklch(26% 0.03 265);
+  --nb-star: oklch(62% 0.05 265);
+  --nb-blend: source-over;
+  --nb-chip: oklch(99% 0.004 265 / 0.84);
+  --nb-label: oklch(22% 0.02 265);
+  --nb-label-2: oklch(36% 0.02 265);
+  --nb-lead: oklch(30% 0.03 265 / 0.45);
+  --nb-out-ink: oklch(48% 0.2 355);
+  --nb-unk-ink: oklch(47% 0.12 65);
+  --glass: oklch(99% 0.004 265 / 0.93);   /* no backdrop blur (speed, 2026-10-05): near-opaque instead */
+  --glass-rail: oklch(99% 0.004 265 / 0.95);
+  --glass-panel: oklch(100% 0 0 / 0.6);
+  --glass-panel-2: oklch(93% 0.012 265 / 0.7);
+  --glass-input: oklch(100% 0 0 / 0.85);
+  --glass-line: oklch(30% 0.03 265 / 0.14);
+  --glass-line-strong: oklch(30% 0.03 265 / 0.3);
+  --glass-rim: oklch(100% 0 0 / 0.9);
+  --glass-capsule: oklch(99% 0.004 265 / 0.93);
+  --glass-head: oklch(98% 0.004 265 / 0.85);
+  --glass-opt: oklch(100% 0 0 / 0.55);
+  --glass-opt-hover: oklch(100% 0 0 / 0.8);
+  --glass-rec: oklch(93% 0.04 255 / 0.85);
+  --glass-on-ink: oklch(99% 0 0);
+  --nb-need-dot: oklch(30% 0.03 265);
+  --glass-shadow: oklch(30% 0.05 270 / 0.16);
+  /* Night window (light theme): the field is a dark night-sky window in the pale page; none in dark */
+  --nb-win-bg: radial-gradient(80% 95% at 50% 15%, oklch(21% 0.06 276), oklch(12% 0.03 272) 78%) oklch(12% 0.03 272);
+  --nb-win-r: 30px;
+  --nb-win-gap: 10px;
+  /* segmented toggles: a raised white chip on a grey track (iOS-like), never a black pill */
+  --seg-track: oklch(30% 0.03 265 / 0.07);
+  --seg-on: oklch(100% 0 0);
+  --seg-on-ink: oklch(22% 0.02 265);
+  --seg-on-shadow: 0 1px 3px oklch(30% 0.05 270 / 0.18), 0 0 0 0.5px oklch(30% 0.03 265 / 0.14);
+  --nb-win-shadow: inset 0 0 0 1px oklch(100% 0 0 / 0.06), inset 0 18px 40px oklch(0% 0 0 / 0.35), 0 1px 0 oklch(100% 0 0 / 0.9), 0 26px 50px -24px oklch(25% 0.08 265 / 0.5);
+  --nb-win-clip: inset(var(--nb-by, 0px) var(--nb-br, 0px) calc(100% - var(--nb-by, 0px) - var(--nb-bh, 100vh)) var(--nb-bx, 0px) round 30px);
+  /* the GL canvas starts 40 px above the band and ends at its foot (field.js layout bleed), so its clip is in its own box */
+  --nb-win-clip-gl: inset(40px var(--nb-br, 0px) 0px var(--nb-bx, 0px) round 30px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --nb-void: oklch(12% 0.03 272);
+    --nb-void-2: oklch(20% 0.055 276);
+    --nb-seat: oklch(72% 0.14 268);
+    --nb-seat-2: oklch(62% 0.1 215);
+    --nb-out-2: oklch(64% 0.15 35);
+    --nb-ink: oklch(30% 0.12 268);
+    --nb-out: oklch(74% 0.17 355);
+    --nb-unk: oklch(80% 0.12 75);
+    --nb-chat: oklch(84% 0.08 245);
+    --nb-need: oklch(100% 0 0);
+    --nb-star: oklch(86% 0.03 265);
+    --nb-blend: lighter;
+    --nb-chip: oklch(14% 0.03 272 / 0.74);
+    --nb-label: oklch(96% 0.01 265);
+    --nb-label-2: oklch(85% 0.03 265);
+    --nb-lead: oklch(100% 0 0 / 0.4);
+    --nb-out-ink: oklch(78% 0.15 355);
+    --nb-unk-ink: oklch(83% 0.12 78);
+  --nb-lead: oklch(100% 0 0 / 0.4);
+  --nb-out-ink: oklch(78% 0.15 355);
+  --nb-unk-ink: oklch(83% 0.12 78);
+    --glass: oklch(19% 0.03 272 / 0.93);
+    --glass-rail: oklch(15% 0.03 272 / 0.95);
+    --glass-panel: oklch(100% 0 0 / 0.05);
+    --glass-panel-2: oklch(100% 0 0 / 0.08);
+    --glass-input: oklch(10% 0.02 272 / 0.6);
+    --glass-line: oklch(100% 0 0 / 0.1);
+    --glass-line-strong: oklch(100% 0 0 / 0.22);
+    --glass-rim: oklch(100% 0 0 / 0.18);
+  --glass-capsule: oklch(17% 0.03 272 / 0.93);
+  --glass-head: oklch(18% 0.03 272 / 0.9);
+  --glass-opt: oklch(12% 0.03 272 / 0.55);
+  --glass-opt-hover: oklch(20% 0.035 268 / 0.75);
+  --glass-rec: oklch(24% 0.05 255 / 0.8);
+  --glass-on-ink: oklch(16% 0.03 260);
+  --nb-need-dot: oklch(100% 0 0);
+    --glass-shadow: oklch(0% 0 0 / 0.4);
+  }
+}
+:root[data-theme="dark"],
+:root[data-look="nebula"] :is(.nb-field, .nb-band, .skyview), :root[data-look="nebula"][data-view="sky"] .nb-capsule {
+  --nb-void: oklch(12% 0.03 272);
+  --nb-void-2: oklch(20% 0.055 276);
+  --nb-seat: oklch(72% 0.14 268);
+  --nb-seat-2: oklch(62% 0.1 215);
+  --nb-out-2: oklch(64% 0.15 35);
+  --nb-ink: oklch(30% 0.12 268);
+  --nb-out: oklch(74% 0.17 355);
+  --nb-unk: oklch(80% 0.12 75);
+  --nb-chat: oklch(84% 0.08 245);
+  --nb-need: oklch(100% 0 0);
+  --nb-star: oklch(86% 0.03 265);
+  --nb-blend: lighter;
+  --nb-chip: oklch(14% 0.03 272 / 0.74);
+  --nb-label: oklch(96% 0.01 265);
+  --nb-label-2: oklch(85% 0.03 265);
+  --nb-lead: oklch(100% 0 0 / 0.4);
+  --nb-out-ink: oklch(78% 0.15 355);
+  --nb-unk-ink: oklch(83% 0.12 78);
+  --glass: oklch(19% 0.03 272 / 0.93);
+  --glass-rail: oklch(15% 0.03 272 / 0.95);
+  --glass-panel: oklch(100% 0 0 / 0.05);
+  --glass-panel-2: oklch(100% 0 0 / 0.08);
+  --glass-input: oklch(10% 0.02 272 / 0.6);
+  --glass-line: oklch(100% 0 0 / 0.1);
+  --glass-line-strong: oklch(100% 0 0 / 0.22);
+  --glass-rim: oklch(100% 0 0 / 0.18);
+  --glass-capsule: oklch(17% 0.03 272 / 0.93);
+  --glass-head: oklch(18% 0.03 272 / 0.9);
+  --glass-opt: oklch(12% 0.03 272 / 0.55);
+  --glass-opt-hover: oklch(20% 0.035 268 / 0.75);
+  --glass-rec: oklch(24% 0.05 255 / 0.8);
+  --glass-on-ink: oklch(16% 0.03 260);
+  --nb-need-dot: oklch(100% 0 0);
+  --glass-shadow: oklch(0% 0 0 / 0.4);
+}
+
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --nb-win-bg: none; --nb-win-r: 0; --nb-win-shadow: none; --nb-win-clip: none; --nb-win-clip-gl: none; --nb-win-gap: 0px; --seg-track: var(--glass-panel); --seg-on: var(--ink); --seg-on-ink: var(--glass-on-ink); --seg-on-shadow: none; } }
+:root[data-theme="dark"] { --nb-win-bg: none; --nb-win-r: 0; --nb-win-shadow: none; --nb-win-clip: none; --nb-win-clip-gl: none; --nb-win-gap: 0px; --seg-track: var(--glass-panel); --seg-on: var(--ink); --seg-on-ink: var(--glass-on-ink); --seg-on-shadow: none; }
+/* the night surfaces redeclare the base aliases so they resolve to night values inside them */
+:root[data-look="nebula"] :is(.nb-field, .nb-band, .skyview), :root[data-look="nebula"][data-view="sky"] .nb-capsule {
+  --panel: var(--glass-panel); --panel-2: var(--glass-panel-2); --line: var(--glass-line); --line-strong: var(--glass-line-strong); color-scheme: dark; }
+
+/* off unless the look is on and the board is showing */
+.nb-field, .nb-band, .nb-capsule, .nb-orn { display: none; }
+.nb-fps { position: fixed; right: 8px; bottom: 8px; z-index: 50; font: 500 var(--t-xs) var(--mono); padding: 4px 8px; border-radius: 6px;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line-strong); }
+
+:root[data-look="nebula"] {
+  --panel: var(--glass-panel);
+  --panel-2: var(--glass-panel-2);
+  --line: var(--glass-line);
+  --line-strong: var(--glass-line-strong);
+  background: var(--nb-void);
+}
+:root[data-look="nebula"] body {
+  background: radial-gradient(90% 55% at 50% 12%, var(--nb-void-2), var(--nb-void) 72%) var(--nb-void);
+  position: relative;
+}
+:root[data-look="nebula"][data-view="board"] .nb-field { display: block; position: absolute; left: 0; top: 0; width: 100%; height: 100vh; overflow: clip; z-index: 0; pointer-events: none; }
+.nb-canvas, .nb-gl { position: absolute; left: 0; top: 0; }
+.nb-labels { position: absolute; left: 0; top: 0; width: 100%; height: 0; }
+.nb-labels.stale .nb-cl, .nb-labels.stale .nb-lt { opacity: .7; }
+.nb-cl, .nb-lt, .nb-note { position: absolute; left: 0; top: 0; white-space: nowrap; border-radius: 8px; background: var(--nb-chip); color: var(--nb-label); }
+/* desk: HUD callout at the band's foot, joined to its cluster by a hairline leader; no chip */
+.nb-cl { display: grid; justify-items: center; text-align: center; line-height: 1.2; background: none; padding: 0 4px; }
+.nb-cl::before { content: ""; position: absolute; left: 50%; bottom: 100%; width: 1px; height: var(--lead, 0px); margin-bottom: 3px;
+  background: linear-gradient(to top, var(--nb-lead), transparent); }
+.nb-cl b { font-size: 0.6875rem; font-weight: 650; letter-spacing: .14em; text-transform: uppercase; color: var(--nb-label-2); }
+.nb-cl .fig { font-size: var(--t-md); font-weight: 600; letter-spacing: -0.01em; color: var(--nb-label); }
+.nb-cl .fig small { font-size: 0.6875rem; font-weight: 500; color: var(--nb-label-2); margin-left: 3px; }
+.nb-cl em { font-style: normal; font-size: 0.65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--nb-label-2); }
+.nb-cl em:empty { display: none; }
+.nb-cl em { white-space: normal; max-width: 15ch; text-wrap: balance; line-height: 1.25; }   /* a long state ("used up, read-only, reading 34 h old") stays in its column */
+.nb-cl.k-out em { color: var(--nb-out-ink); }
+.nb-cl.k-unknown em { color: var(--nb-unk-ink); }
+.nb-cl .sub { display: none; }
+.nb-lt { font-size: 0.6875rem; font-weight: 600; color: var(--nb-label); padding: 2px 7px; max-width: 28ch; overflow: hidden; text-overflow: ellipsis;
+  will-change: transform; transition: opacity .25s; }
+.nb-lt.quiet { font-weight: 500; color: var(--nb-label-2); }
+.nb-lt.hid { opacity: 0; }
+.nb-cl i { display: none; font-style: normal; font-size: 0.6875rem; color: var(--nb-label-2); }
+.nb-note { padding: 4px 10px; font-size: var(--t-sm); font-weight: 600; color: var(--nb-label); outline: 1.5px dashed var(--nb-unk); }
+
+:root[data-look="nebula"][data-view="board"] .nb-band { display: block; height: 236px; margin: var(--nb-win-gap, 0px) var(--s5) var(--s3) 96px; position: relative; z-index: 0; }
+/* Night window: drawn inside the field layer under its canvas, at the band's rect (nebula.js measure); light theme only */
+:root[data-look="nebula"][data-view="board"] .nb-field::before { content: ""; position: absolute; top: var(--nb-by, 0px); left: var(--nb-bx, 0px);
+  right: var(--nb-br, 0px); height: var(--nb-bh, 0px); background: var(--nb-win-bg); border-radius: var(--nb-win-r); box-shadow: var(--nb-win-shadow); }
+:root[data-look="nebula"][data-view="board"] .nb-field > .nb-canvas { clip-path: var(--nb-win-clip); }
+:root[data-look="nebula"][data-view="board"] .nb-field > .nb-gl { clip-path: var(--nb-win-clip-gl); }
+
+/* rail: a glass bar; the capsule replaces its nav, the field band replaces its seat chips */
+:root[data-look="nebula"] .rail { background: var(--glass-rail); border-bottom-color: var(--glass-line); padding-left: 96px; }
+:root[data-look="nebula"] .rail .nav,
+:root[data-look="nebula"] .rail .seats { display: none; }
+
+/* windows */
+:root[data-look="nebula"][data-view="board"] .shell { position: relative; z-index: 1; max-width: none; align-items: start; gap: 22px;
+  grid-template-columns: minmax(250px, 0.9fr) minmax(0, 1.5fr) minmax(300px, 1fr); grid-template-rows: auto auto;
+  padding: 0 var(--s5) var(--s5) 96px; perspective: 1600px; }
+:root[data-look="nebula"][data-view="board"] #side-wrap { display: contents; }
+:root[data-look="nebula"][data-view="board"] :is(#side, .col, #cap) {
+  position: relative; z-index: 1; grid-row: 1; min-width: 0; border-radius: 26px; padding: 18px;
+  background: var(--glass);
+  box-shadow: inset 0 1px 0 var(--glass-rim), 0 28px 56px var(--glass-shadow);
+  max-height: max(340px, calc(100vh - var(--nb-top, 300px) - 28px)); overflow: auto; overscroll-behavior: contain;
+  transition: transform .25s var(--ease), box-shadow .25s var(--ease); }
+:root[data-look="nebula"][data-view="board"] #side { grid-column: 1; transform: rotateY(12deg) translateZ(-40px); transform-origin: right center; }
+:root[data-look="nebula"][data-view="board"] .col { grid-column: 2; transform: translateZ(24px); padding-bottom: 52px; gap: var(--s4); }
+:root[data-look="nebula"][data-view="board"] #cap { grid-column: 3; transform: rotateY(-12deg) translateZ(-40px); transform-origin: left center; }
+:root[data-look="nebula"][data-view="board"] :is(#side, #cap):is(:hover, :focus-within) { transform: translateZ(20px); z-index: 2; }
+:root[data-look="nebula"][data-view="board"] .section-head { flex-wrap: wrap; row-gap: var(--s2); }
+:root[data-look="nebula"] .section-head h2 { font-size: var(--t-lg); white-space: nowrap; }
+:root[data-look="nebula"] :is(.free, .reply) { background: var(--glass-input); }
+:root[data-look="nebula"] .strip { border-radius: 14px; }
+:root[data-look="nebula"] .since { border-radius: 12px; }
+:root[data-look="nebula"][data-view="board"] .col:has(.strip.sheet) { transform: none; overflow: visible; max-height: none; }
+
+/* ornament: actions overlapping the centre window's bottom edge */
+:root[data-look="nebula"][data-view="board"] .nb-orn { display: flex; grid-column: 2; grid-row: 2; justify-self: center; margin-top: -46px;
+  position: relative; z-index: 3; gap: 4px; padding: 5px; border-radius: 999px; background: var(--glass-rail); box-shadow: inset 0 1px 0 var(--glass-rim), 0 10px 24px var(--glass-shadow); }
+.nb-orn .btn { border-radius: 999px; padding: 6px 14px; color: var(--ink); }
+
+/* capsule navigation (not blurred: the cheapest place to save GPU, risk note) */
+:root[data-look="nebula"] .nb-capsule { display: flex; flex-direction: column; gap: 4px; position: fixed; z-index: 12;
+  left: 18px; top: 50%; transform: translateY(-50%); padding: 6px; border-radius: 40px; background: var(--glass-capsule);
+  box-shadow: inset 0 1px 0 var(--glass-rim), 0 12px 30px var(--glass-shadow); }
+.nb-capsule a { display: grid; justify-items: center; gap: 2px; width: 58px; padding: 8px 0 6px; border-radius: 28px;
+  color: var(--ink-2); text-decoration: none; font-size: 0.6875rem; }
+.nb-capsule a svg { width: 18px; height: 18px; }
+.nb-capsule a:hover { color: var(--ink); background: var(--glass-panel-2); }
+.nb-capsule a[aria-current="page"] { color: var(--ink); background: var(--glass-panel-2); box-shadow: inset 0 0 0 1px var(--glass-line-strong); }
+
+@media (max-width: 1180px) {
+  :root[data-look="nebula"][data-view="board"] .shell { grid-template-columns: minmax(230px, 0.85fr) minmax(0, 1.4fr) minmax(270px, 1fr); }
+}
+/* phone: flat stacked windows, capsule at the bottom, a third of the particles (field.js) */
+@media (max-width: 760px) {
+  :root[data-look="nebula"] .rail { padding-left: var(--s4); }
+  :root[data-look="nebula"][data-view="board"] .nb-band { height: 236px; margin: 0 var(--s3) var(--s2); }
+  .nb-cl { max-width: 92px; white-space: normal; padding: 2px 6px 3px; background: var(--nb-chip); }
+  .nb-cl .fig, .nb-cl em, .nb-cl::before { display: none; }
+  .nb-cl .sub { display: block; font-size: 0.6875rem; color: var(--nb-label-2); }
+  .nb-cl b { letter-spacing: .04em; text-transform: none; color: var(--nb-label); }
+  .nb-cl b { font-size: var(--t-xs); }
+  .nb-cl span, .nb-cl i { font-size: 0.6875rem; line-height: 1.2; }
+  :root[data-look="nebula"][data-view="board"] .shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; perspective: none;
+    padding: 0 var(--s3) 96px; gap: var(--s4); }
+  :root[data-look="nebula"][data-view="board"] :is(#side, .col, #cap) { grid-column: 1; transform: none; max-height: 78vh; border-radius: 20px; padding: 14px; }
+  :root[data-look="nebula"][data-view="board"] :is(#side, #cap):is(:hover, :focus-within) { transform: none; }
+  :root[data-look="nebula"][data-view="board"] .col { grid-row: 1; }
+  :root[data-look="nebula"][data-view="board"] .nb-orn { grid-column: 1; grid-row: 2; margin-top: -40px; }
+  :root[data-look="nebula"][data-view="board"] #side { grid-row: 3; }
+  :root[data-look="nebula"][data-view="board"] #cap { grid-row: 4; }
+  :root[data-look="nebula"] .nb-capsule { flex-direction: row; left: 50%; top: auto; bottom: max(10px, env(safe-area-inset-bottom));
+    transform: translateX(-50%); }
+  .nb-capsule a { width: 64px; }
+  .nb-lt { display: none; }
+  .nb-cl i { display: block; }
+}
+
+/* ======================================================================== interior A: instrument HUD
+   The board's own DOM, restyled: no boxed strips, hairlines, a large thin wait figure, tracked tags, options as one
+   segmented list, glowing state dots, capacity as arcs plus the week-left figure. Every control and handler unchanged. */
+.cap-arc { display: none; }
+:root[data-look="nebula"] {
+  --display: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  --spring: linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.281 6.7%, 0.723 12.9%, 0.938 16.7%, 1.017 19.4%, 1.067, 1.077 24.5%, 1.065 27.3%, 1.017 33.4%, 0.994 39.6%, 0.995 47.8%, 1.001 62.9%, 1);
+}
+:root[data-look="nebula"] ::selection { background: color-mix(in oklch, var(--action) 35%, transparent); }
+:root[data-look="nebula"] * { scrollbar-width: thin; scrollbar-color: var(--glass-line-strong) transparent; }
+
+/* glass: pointer-lit specular rim (1 px edge), soft sheen, deep offset shadow */
+:root[data-look="nebula"][data-view="board"] :is(#side, .col, #cap) { border-radius: 28px; padding: 6px 22px 22px; isolation: isolate;
+  box-shadow: 0 40px 70px -24px var(--glass-shadow), inset 0 0 0 1px var(--glass-line);
+  transition: transform .9s var(--spring), box-shadow .6s var(--ease); }
+:root[data-look="nebula"][data-view="board"] :is(#side, .col, #cap)::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+  pointer-events: none; z-index: 3;
+  background: radial-gradient(90% 70% at var(--mx, 30%) var(--my, -10%), var(--glass-rim), transparent 46%, color-mix(in oklch, var(--nb-seat) 30%, transparent) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+:root[data-look="nebula"][data-view="board"] .col { padding-bottom: 56px; }
+
+/* window headings: tracked caps, count, meta to the right */
+:root[data-look="nebula"][data-view="board"] .section-head { position: sticky; top: -6px; z-index: 2; margin: 0 -22px var(--s2); padding: 16px 22px 10px;
+  background: linear-gradient(to bottom, var(--glass-head) 60%, transparent); }
+:root[data-look="nebula"] .section-head h2 { font-size: 0.8125rem; font-weight: 650; letter-spacing: .16em; text-transform: uppercase; }
+:root[data-look="nebula"] .section-head .meta { font-size: var(--t-xs); }
+:root[data-look="nebula"] .section-head .btn { padding: 4px 10px; border-radius: 999px; font-size: var(--t-xs); }
+
+/* NEEDS YOU: rows, not boxes */
+:root[data-look="nebula"] .strips { gap: 0; }
+:root[data-look="nebula"] .strip { grid-template-columns: 76px minmax(0, 1fr); background: transparent; border: 0; border-radius: 18px;
+  border-top: 1px solid var(--glass-line); overflow: visible; padding: 16px 0 18px; transition: background .3s var(--ease); }
+:root[data-look="nebula"] .strip:first-child { border-top-color: transparent; }
+:root[data-look="nebula"] .strip:focus-within { box-shadow: none; }
+:root[data-look="nebula"] .strip.cur { outline: 0; background: var(--glass-panel); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--action) 45%, transparent); border-top-color: transparent; }
+:root[data-look="nebula"] .strip.cur + .strip { border-top-color: transparent; }
+:root[data-look="nebula"] .strip .wait { background: none; border: 0; padding: 2px 0 0 10px; gap: 6px; }
+:root[data-look="nebula"] .wait .age { font: 300 2.1rem/0.95 var(--display); letter-spacing: -0.03em; }
+:root[data-look="nebula"] .strip.cur .wait .age { color: var(--action); }
+:root[data-look="nebula"] .wait .unit, :root[data-look="nebula"] .wait .kind {
+  font-size: 0.65rem; font-weight: 650; letter-spacing: .14em; text-transform: uppercase; }
+:root[data-look="nebula"] .wait .kind { margin-top: 4px; letter-spacing: .08em; }
+:root[data-look="nebula"] .strip .body { padding: 0 14px 0 4px; gap: 10px; }
+:root[data-look="nebula"] .strip .who { gap: 4px 12px; }
+:root[data-look="nebula"] .strip .who .title { flex-basis: 100%; font: 600 1rem/1.3 var(--display); letter-spacing: -0.01em; text-wrap: balance; }
+:root[data-look="nebula"] .chip { border: 0; padding: 0; border-radius: 0; font-size: 0.6875rem; font-weight: 650; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ink-3); background: none; }
+:root[data-look="nebula"] .chip.wi { color: var(--ink-2); }
+:root[data-look="nebula"] .chip.risk-high { color: var(--bad); }
+:root[data-look="nebula"] .chip.risk-high::before { content: ""; width: 6px; height: 6px; margin-right: 3px; border: 1.5px solid currentColor; transform: rotate(45deg); }
+:root[data-look="nebula"] .chip.risk-med { color: var(--warn); }
+:root[data-look="nebula"] .chip.risk-low { color: var(--ok); }
+:root[data-look="nebula"] .chip.ro { text-decoration: underline dashed 1px; text-underline-offset: 3px; }
+:root[data-look="nebula"] .ask, :root[data-look="nebula"] .part .legend { color: var(--ink-2); }
+:root[data-look="nebula"] .opts { display: grid; gap: 1px; border-radius: 14px; overflow: hidden; background: var(--glass-line); max-width: 80ch; }
+:root[data-look="nebula"] .opt { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 2px 12px; align-items: start; border: 0; border-radius: 0;
+  padding: 11px 14px; background: var(--glass-opt); font-size: var(--t-sm); font-weight: 600; transition: background .25s var(--ease); }
+:root[data-look="nebula"] .opt:hover { background: var(--glass-opt-hover); }
+:root[data-look="nebula"] .opt kbd { grid-row: span 2; border: 0; box-shadow: inset 0 0 0 1px var(--glass-line-strong); border-radius: 6px; text-align: center; line-height: 18px; background: none; }
+:root[data-look="nebula"] .opt .desc { grid-column: 2; font-size: var(--t-xs); font-weight: 400; color: var(--ink-3); }
+:root[data-look="nebula"] .opt.rec { background: var(--glass-rec); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--action) 55%, transparent); }
+:root[data-look="nebula"] .opt.rec::after { grid-column: 3; grid-row: 1; font-size: 0.65rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; padding-top: 2px; }
+:root[data-look="nebula"] .opt.on { background: var(--glass-rec); box-shadow: inset 0 0 0 1.5px var(--action); }
+:root[data-look="nebula"] :is(.free, .reply) { border: 0; border-radius: 12px; padding: 9px 13px; box-shadow: inset 0 0 0 1px var(--field); }
+:root[data-look="nebula"] .btn { border-radius: 10px; }
+:root[data-look="nebula"] .btn.primary { border-radius: 12px; padding: 8px 18px; background: var(--ink); border-color: var(--ink); color: var(--glass-on-ink); }
+:root[data-look="nebula"] .timeout { font-size: var(--t-xs); }
+:root[data-look="nebula"] .evidence { border-top-color: var(--glass-line); }
+:root[data-look="nebula"] .evidence summary { font-size: 0.6875rem; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+:root[data-look="nebula"] .receipt { gap: 4px 14px; }
+:root[data-look="nebula"] .receipt .testline { background: none; padding: 0; font-size: 0.75rem; color: var(--ink-2); }
+:root[data-look="nebula"] .since { background: none; border: 0; border-bottom: 1px solid var(--glass-line); border-radius: 0; padding: 0 0 12px; margin-bottom: 4px; }
+
+/* RUNNING (sessions) */
+:root[data-look="nebula"] #side .group { border: 0; background: none; border-radius: 0; margin-bottom: 8px; }
+:root[data-look="nebula"] #side .group > h3 { padding: 10px 0 6px; border: 0; background: none; font-size: 0.6875rem; font-weight: 650;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+:root[data-look="nebula"] .sess li { padding: 7px 0; border-top: 1px solid var(--glass-line); grid-template-columns: 14px minmax(0, 1fr) auto; }
+:root[data-look="nebula"] .sess li:first-child { border-top: 0; }
+:root[data-look="nebula"] .sess .st { justify-self: center; }
+:root[data-look="nebula"] .sess .st.working { box-shadow: 0 0 0 3px color-mix(in oklch, var(--action) 20%, transparent); }
+:root[data-look="nebula"] .sess .st.needs_you { background: var(--nb-need-dot); box-shadow: 0 0 0 3px color-mix(in oklch, var(--nb-need-dot) 22%, transparent), 0 0 10px var(--nb-need-dot); }
+:root[data-look="nebula"] .sess a.nm { font-size: var(--t-sm); }
+:root[data-look="nebula"] .idle-fold { border-top: 0; padding: 4px 0; }
+:root[data-look="nebula"] .seg { border: 0; border-radius: 999px; background: var(--seg-track); padding: 2px; }
+:root[data-look="nebula"] .seg button { border-radius: 999px; padding: 4px 12px; }
+:root[data-look="nebula"] .seg button[aria-pressed="true"] { background: var(--seg-on); color: var(--seg-on-ink); box-shadow: var(--seg-on-shadow); }
+
+/* CAPACITY: arc + week left, hairline rows */
+:root[data-look="nebula"] #cap .group { border: 0; background: none; border-radius: 0; }
+:root[data-look="nebula"] .cap-seat { grid-template-columns: 50px minmax(0, 1fr) auto; gap: 3px 14px; padding: 14px 0; border-top: 1px solid var(--glass-line); }
+:root[data-look="nebula"] .cap-seat:first-child { border-top: 0; }
+:root[data-look="nebula"] .cap-seat > * { grid-column: 2 / -1; }
+:root[data-look="nebula"] .cap-arc { display: contents; }
+:root[data-look="nebula"] .cap-arc .arc { grid-column: 1; grid-row: 1 / span 3; width: 50px; height: 50px; }
+:root[data-look="nebula"] .cap-arc .tr { stroke: var(--glass-line-strong); }
+:root[data-look="nebula"] .cap-arc .w7 { stroke: var(--action); }
+:root[data-look="nebula"] .cap-arc .w5 { stroke: var(--ink-3); }
+:root[data-look="nebula"] .cap-seat.blocked .cap-arc .w5 { stroke: var(--bad); }
+:root[data-look="nebula"] .cap-seat.near .cap-arc .w7 { stroke: var(--warn); }
+:root[data-look="nebula"] .cap-left { grid-column: 3; grid-row: 1; text-align: right; font: 300 1.6rem/1 var(--display); letter-spacing: -0.02em; }
+:root[data-look="nebula"] .cap-left small { display: block; margin-top: 3px; font: 650 0.6rem var(--font); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+:root[data-look="nebula"] .cap-name { grid-column: 2; grid-row: 1; gap: 4px 10px; }
+:root[data-look="nebula"] .cap-name .dot { display: none; }
+:root[data-look="nebula"] .cap-name strong { font-size: var(--t-md); font-weight: 650; }
+:root[data-look="nebula"] .chip.st-ok { display: none; }
+:root[data-look="nebula"] .chip.resume { color: var(--action); }
+:root[data-look="nebula"] .cap-row { grid-template-columns: 20px 1fr 34px; }
+:root[data-look="nebula"] .cap-row .gauge { display: none; }      /* the arc carries the figure */
+:root[data-look="nebula"] .cap-row { grid-template-columns: 20px auto minmax(0, 1fr); }
+:root[data-look="nebula"] .cap-row .cap-v { text-align: left; }
+:root[data-look="nebula"] .cap-row .cap-r { grid-column: 3; }
+:root[data-look="nebula"] .gauge.wide i { background: var(--ink-2); }
+:root[data-look="nebula"] .plan { border-top: 1px solid var(--glass-line); padding: 14px 0 0; }
+:root[data-look="nebula"] .plan figcaption { font-size: 0.6875rem; font-weight: 650; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+:root[data-look="nebula"] .pace-advice { margin-top: 2px; }
+
+/* one authored moment: windows settle in when the look switches on */
+:root[data-look="nebula"][data-view="board"] :is(#side, .col, #cap) { animation: nb-settle 1.1s var(--spring) both; }
+:root[data-look="nebula"][data-view="board"] .col { animation-delay: .06s; }
+:root[data-look="nebula"][data-view="board"] #cap { animation-delay: .12s; }
+@keyframes nb-settle { from { opacity: 0; filter: blur(8px); translate: 0 18px; } to { opacity: 1; filter: none; translate: 0 0; } }
+@media (max-width: 760px) {
+  :root[data-look="nebula"] .strip { grid-template-columns: minmax(0, 1fr); padding: 14px 0 16px; }
+  :root[data-look="nebula"] .strip .wait { flex-direction: row; align-items: baseline; gap: 8px; padding: 0 0 8px; }
+  :root[data-look="nebula"] .wait .age { font-size: 1.6rem; }
+  :root[data-look="nebula"] .wait .kind { margin: 0 0 0 auto; }
+  :root[data-look="nebula"] .strip .body { padding: 0; }
+  :root[data-look="nebula"] .strip .who .title { flex-basis: 100%; }
+}
+
+/* ======================================================================== Sky (#/sky): the observatory, nebula look only */
+.skyview { position: fixed; inset: 0; z-index: 1; overflow: hidden; color: var(--ink);
+  background: radial-gradient(70% 60% at 50% 42%, var(--nb-void-2), var(--nb-void) 75%) var(--nb-void); }
+:root[data-look="nebula"][data-view="sky"] { background: var(--nb-void); }
+:root[data-look="nebula"][data-view="sky"] body { background: radial-gradient(70% 60% at 50% 42%, var(--nb-void-2), var(--nb-void) 75%) var(--nb-void); overflow: hidden; }
+:root[data-look="nebula"][data-view="sky"] .rail { display: none; }
+.sky-gl { position: absolute; inset: 0; width: 100%; height: 100%; }
+.sky-labels { position: absolute; inset: 0; pointer-events: none; }
+.sky-cl, .sky-lt { position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform; }
+.sky-cl { pointer-events: auto; display: grid; justify-items: center; gap: 0; padding: 4px 10px 5px; border: 0; border-radius: 14px; cursor: pointer;
+  background: var(--nb-chip); color: var(--nb-label); font: inherit; text-align: center; transition: background .25s var(--ease), box-shadow .25s var(--ease); }
+.sky-cl:hover, .sky-cl:focus-visible { background: var(--glass-capsule); box-shadow: inset 0 0 0 1px var(--glass-line-strong); }
+.sky-cl b { font-size: 0.6875rem; font-weight: 650; letter-spacing: .14em; text-transform: uppercase; color: var(--nb-label-2); }
+.sky-cl .fig { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
+.sky-cl .fig small { font-size: 0.6875rem; font-weight: 500; color: var(--nb-label-2); margin-left: 3px; }
+.sky-cl em { font-style: normal; font-size: 0.65rem; font-weight: 650; letter-spacing: .06em; color: var(--nb-label-2); }
+.sky-cl.k-out em { color: var(--nb-out-ink); }
+.sky-cl.k-unknown em { color: var(--nb-unk-ink); }
+.sky-cl.k-unknown { box-shadow: inset 0 0 0 1px var(--nb-unk); }
+.sky-lt { font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 7px; background: var(--nb-chip); color: var(--nb-label); max-width: 30ch; overflow: hidden; text-overflow: ellipsis; }
+.sky-lt.quiet { font-weight: 500; color: var(--nb-label-2); }
+.sky-nogl { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); color: var(--ink-2); }
+
+.sky-hud { position: absolute; left: 104px; top: 20px; display: flex; align-items: center; gap: 18px; padding: 8px 16px; border-radius: 999px;
+  background: var(--glass-capsule); box-shadow: inset 0 1px 0 var(--glass-rim), 0 12px 30px var(--glass-shadow); font-size: var(--t-sm); color: var(--ink-2); }
+.sky-hud b { color: var(--ink); font-weight: 650; }
+.sky-health { display: inline-flex; align-items: center; gap: 7px; font-size: 0.75rem; font-weight: 700; letter-spacing: .08em; }
+.sky-health i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.sky-health.ok { color: var(--ok); }
+.sky-health.unknown { color: var(--warn); }
+.sky-hint { color: var(--ink-3); font-size: var(--t-xs); }
+.sky-back { display: inline-flex; gap: 8px; align-items: center; padding: 3px 4px 3px 10px; border: 0; border-radius: 999px; background: var(--glass-panel-2); color: var(--ink); font: inherit; font-size: var(--t-xs); font-weight: 600; cursor: pointer; }
+.sky-back kbd { font: 600 0.65rem var(--mono); padding: 2px 6px; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--glass-line-strong); }
+
+.sky-panel { position: absolute; right: 24px; top: 24px; bottom: 24px; width: min(380px, 34vw); overflow: auto; padding: 22px 22px 24px; border-radius: 28px;
+  background: var(--glass);
+  box-shadow: inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px var(--glass-line), 0 40px 70px -24px var(--glass-shadow);
+  animation: sky-in .8s var(--spring, cubic-bezier(.16,1,.3,1)) both; }
+@keyframes sky-in { from { opacity: 0; translate: 24px 0; filter: blur(6px); } to { opacity: 1; translate: 0 0; filter: none; } }
+.sky-panel header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.sky-panel h2 { font: 650 1.5rem/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; letter-spacing: -0.02em; }
+.sky-panel .fig { font: 300 2.4rem/1 -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; letter-spacing: -0.03em; text-align: right; }
+.sky-panel .fig small { display: block; font: 650 0.6rem var(--font); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin-top: 4px; }
+.sky-state { margin: 6px 0 16px; font-size: var(--t-sm); color: var(--ink-2); }
+.sky-state.k-out { color: var(--bad); font-weight: 600; }
+.sky-state.k-unknown { color: var(--warn); font-weight: 600; }
+.sky-win { display: grid; grid-template-columns: 28px auto minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--glass-line); font-size: var(--t-xs); color: var(--ink-3); }
+.sky-win .k { font-weight: 650; letter-spacing: .1em; text-transform: uppercase; }
+.sky-win b { font-size: var(--t-lg); font-weight: 600; color: var(--ink); }
+.sky-resume, .sky-pace { margin: 10px 0 0; font-size: var(--t-sm); color: var(--ink-2); }
+.sky-meta { margin: 8px 0 0; font-size: var(--t-xs); color: var(--ink-3); }
+.sky-panel h3 { display: flex; justify-content: space-between; margin: 22px 0 6px; font-size: 0.6875rem; font-weight: 650; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.sky-chats { list-style: none; margin: 0; padding: 0; }
+.sky-chats li { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--glass-line); font-size: var(--t-sm); }
+.sky-chats li:first-child { border-top: 0; }
+.sky-chats .st { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); justify-self: center; }
+.sky-chats .st.working { background: var(--action); }
+.sky-chats .st.needs_you { background: var(--nb-need-dot); box-shadow: 0 0 10px var(--nb-need-dot); }
+.sky-chats .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); text-decoration: none; }
+.sky-chats .ask-open { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: baseline; border: 0; background: none; padding: 0; font: inherit; text-align: left; cursor: pointer; font-weight: 600; color: var(--ink); }
+.sky-chats .ask-open .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sky-chats .ask-open .go { font-size: 0.65rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--action); }
+.sky-chats .rt { font-size: var(--t-xs); color: var(--ink-3); }
+
+.sky-ask { position: absolute; left: 50%; bottom: 28px; width: min(640px, calc(100vw - 48px)); max-height: min(70vh, 640px); overflow: auto; transform: translateX(-60%);
+  padding: 20px 22px; border-radius: 26px; display: grid; gap: 12px; background: var(--glass);
+  box-shadow: inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px var(--glass-line), 0 40px 70px -24px var(--glass-shadow); animation: sky-up .7s var(--spring, cubic-bezier(.16,1,.3,1)) both; }
+@keyframes sky-up { from { opacity: 0; translate: 0 24px; filter: blur(6px); } to { opacity: 1; translate: 0 0; filter: none; } }
+.sky-ask header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.sky-ask h2 { font: 600 1.1rem/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; letter-spacing: -0.01em; }
+.sky-ask .tags { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 0.6875rem; font-weight: 650; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); }
+.sky-ask .tags .risk-high { color: var(--bad); }
+.sky-ask footer { display: flex; gap: 8px; justify-content: flex-end; }
+.sky-ask .opts { display: grid; gap: 1px; border-radius: 14px; overflow: hidden; background: var(--glass-line); }
+.sky-ask .opt { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 2px 12px; border: 0; border-radius: 0; padding: 11px 14px; background: var(--glass-opt); font-weight: 600; }
+.sky-ask .opt:hover { background: var(--glass-opt-hover); }
+.sky-ask .opt .desc { grid-column: 2; font-weight: 400; }
+.sky-ask .opt.rec { background: var(--glass-rec); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--action) 55%, transparent); }
+.sky-ask .opt.rec::after { grid-column: 3; grid-row: 1; font-size: 0.65rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.sky-ask :is(.free, .reply) { border: 0; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--field); background: var(--glass-input); }
+@media (max-width: 760px) {
+  .sky-hud { left: 12px; right: 12px; top: 12px; justify-content: space-between; gap: 10px; }
+  .sky-hint { display: none; }
+  .sky-panel { left: 10px; right: 10px; top: auto; bottom: 96px; width: auto; max-height: 52vh; border-radius: 22px; }
+  /* seat callouts: one-line chips (name and week left; used up in pink); the full reading opens with a tap */
+  .sky-cl { display: flex; gap: 5px; align-items: center; padding: 3px 10px; border-radius: 999px; min-height: 32px; }
+  .sky-cl b { font-size: 0.6875rem; letter-spacing: .04em; text-transform: none; }
+  .sky-cl .fig { font-size: var(--t-xs); font-weight: 650; }
+  .sky-cl .fig small, .sky-cl em { display: none; }
+  .sky-cl.k-out .fig { color: var(--nb-out-ink); }
+  .sky-cl.k-unknown .fig { color: var(--nb-unk-ink); }
+  .sky-ask { left: 10px; right: 10px; width: auto; transform: none; bottom: 96px; max-height: 64vh; }
+}
+
+
+/* ======================================================================== the other views, same world
+   Graph, chats (sessions), chat history, settings and work items: one glass sheet beside the capsule, hairline groups
+   inside, the instrument type. Behind them is only the void gradient, so no backdrop blur (it would cost and show nothing). */
+:root[data-look="nebula"] .workview { margin: 6px var(--s5) var(--s5) 96px; max-width: none; padding: 26px 30px 30px; border-radius: 28px;
+  background: var(--glass); box-shadow: inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px var(--glass-line), 0 40px 70px -24px var(--glass-shadow);
+  animation: nb-settle 0.9s var(--spring) both; }
+:root[data-look="nebula"] .workview .page { padding: 0; max-width: 1180px; }
+:root[data-look="nebula"] .page h1, :root[data-look="nebula"] .wi-head h1 { font: 650 1.75rem/1.15 var(--display); letter-spacing: -0.02em; }
+:root[data-look="nebula"] .page > a.hint:first-child { font-size: 0.6875rem; font-weight: 650; letter-spacing: .14em; text-transform: uppercase; text-decoration: none; color: var(--ink-3); }
+:root[data-look="nebula"] .workview .group { border: 0; border-radius: 18px; background: var(--glass-panel); }
+:root[data-look="nebula"] .workview .group > h3 { border-bottom: 1px solid var(--glass-line); padding: 12px 16px; font-size: 0.6875rem; font-weight: 650;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); background: none; }
+:root[data-look="nebula"] .set-row { border-top-color: var(--glass-line); }
+:root[data-look="nebula"] .set-row h3 { font-size: var(--t-md); }
+:root[data-look="nebula"] .sess-table th { font-size: 0.65rem; letter-spacing: .14em; text-transform: uppercase; border-bottom-color: var(--glass-line); }
+:root[data-look="nebula"] .sess-table td { border-top-color: var(--glass-line); }
+:root[data-look="nebula"] .sess-table .st.needs_you { background: var(--nb-need-dot); box-shadow: 0 0 8px var(--nb-need-dot); }
+:root[data-look="nebula"] .field, :root[data-look="nebula"] input[type=search], :root[data-look="nebula"] select.field {
+  border: 0; border-radius: 10px; background: var(--glass-input); box-shadow: inset 0 0 0 1px var(--field); color: var(--ink); }
+
+/* graph: the canvas sits on a glass stage, the node panel is a glass sheet, the toolbar is pills */
+:root[data-look="nebula"] .graphview { margin-left: 96px; padding: 6px var(--s5) var(--s5) 0; height: calc(100vh - 90px); }
+:root[data-look="nebula"] .g-bar { gap: 8px; }
+:root[data-look="nebula"] .g-stage { border: 0; border-radius: 28px; overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 30%, var(--nb-void-2), transparent 70%), var(--glass);
+  box-shadow: inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px var(--glass-line), 0 40px 70px -24px var(--glass-shadow); }
+:root[data-look="nebula"] .g-panel, :root[data-look="nebula"] .g-menu, :root[data-look="nebula"] .g-tip { border: 0; border-radius: 20px; background: var(--glass-capsule);
+  box-shadow: inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px var(--glass-line), 0 24px 50px -16px var(--glass-shadow); }
+:root[data-look="nebula"] .g-mini { border: 0; border-radius: 14px; background: var(--glass-capsule); box-shadow: inset 0 0 0 1px var(--glass-line); }
+:root[data-look="nebula"] .g-filters .chip, :root[data-look="nebula"] .chip.toggle { border: 0; padding: 4px 10px; border-radius: 999px; background: var(--glass-panel); }
+:root[data-look="nebula"] .chip.toggle[aria-pressed="true"] { background: var(--seg-on); color: var(--seg-on-ink); box-shadow: var(--seg-on-shadow); }
+
+/* floating surfaces everywhere in the look: palette, spawn, focus and voice pops, toast, undo */
+:root[data-look="nebula"] :is(.pop, dialog.palette, dialog.spawn) { border: 0; border-radius: 22px; background: var(--glass-capsule);
+  box-shadow: inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px var(--glass-line), 0 30px 60px -20px var(--glass-shadow); }
+:root[data-look="nebula"] #toast { border-radius: 999px; background: var(--ink); color: var(--glass-on-ink); }
+
+@media (max-width: 760px) {
+  :root[data-look="nebula"] .workview { margin: 6px 10px 96px; padding: 18px 16px 22px; border-radius: 22px; }
+  :root[data-look="nebula"] .graphview { margin-left: 0; padding: 6px 10px 96px; height: calc(100vh - 60px); }
+}
+:root[data-look="nebula"] .strip.sheet { background: var(--glass-capsule); }
+:root[data-look="nebula"] .g-canvas:focus-visible { outline: 0; }
+:root[data-look="nebula"] .g-stage:has(.g-canvas:focus-visible) { box-shadow: inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px color-mix(in oklch, var(--focus) 60%, transparent), 0 40px 70px -24px var(--glass-shadow); }
+
+
+/* parked needs (seat at a limit): continue-on-another-seat rows */
+:root[data-look="nebula"] .parked li { border-top-color: var(--glass-line); }
+:root[data-look="nebula"] .parked select { border-radius: 10px; border-color: var(--glass-line); background: var(--glass-opt, transparent); }
+
+/* ======================================================================== phone (nebula look): one column, thumb-sized, no nested scroll */
+@media (max-width: 760px) {
+  /* rail scrolls away with the page (the capsule stays); one-line headline */
+  :root[data-look="nebula"] .rail { position: relative; padding: 10px 14px 12px; gap: 6px 10px; }
+  :root[data-look="nebula"] .headline .lead { font-size: var(--t-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  :root[data-look="nebula"] .headline .counts { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 14px; font-size: var(--t-xs); }
+  :root[data-look="nebula"] .rail-tools .btn { min-width: 40px; min-height: 40px; }
+
+  /* board field: a compact chip per seat (name and week left, state by colour and a dashed rim); the full reading is in Capacity */
+  :root[data-look="nebula"][data-view="board"] .nb-band { height: 220px; }
+  .nb-cl { max-width: none; white-space: nowrap; display: flex; gap: 5px; align-items: baseline; padding: 3px 8px; border-radius: 999px; }
+  .nb-cl .fig { display: inline; font-size: var(--t-xs); font-weight: 650; }
+  .nb-cl .fig small, .nb-cl .sub, .nb-cl i, .nb-cl em { display: none; }
+  .nb-cl b { font-size: 0.6875rem; font-weight: 600; letter-spacing: .02em; color: var(--nb-label-2); }
+  .nb-cl.k-out .fig { color: var(--nb-out-ink); }
+  .nb-cl.k-unknown { outline: 1px dashed var(--nb-unk); outline-offset: -1px; }
+  .nb-cl.k-unknown .fig { color: var(--nb-unk-ink); }
+
+  /* board windows: full height cards in one scroll (no scroll inside scroll); actions bar sits in the card's foot */
+  :root[data-look="nebula"][data-view="board"] :is(#side, .col, #cap) { max-height: none; overflow: visible; padding: 16px 14px; }
+  :root[data-look="nebula"][data-view="board"] .col { padding-bottom: 64px; }
+  :root[data-look="nebula"][data-view="board"] .nb-orn { margin-top: -58px; }
+  :root[data-look="nebula"][data-view="board"] .shell { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+  :root[data-look="nebula"] .parked select { flex: 1 1 100%; height: 40px; }
+  :root[data-look="nebula"] .parked .btn { flex: 1 1 100%; }
+
+  /* touch targets */
+  :root[data-look="nebula"] .seg button, :root[data-look="nebula"] .chip.toggle { min-height: 36px; padding: 6px 14px; }
+  :root[data-look="nebula"] .btn { min-height: 40px; }
+  :root[data-look="nebula"] summary { padding: 9px 0; }
+  :root[data-look="nebula"] :is(button.chip, a.chip) { min-height: 32px; }
+  :root[data-look="nebula"] li > a.nm { display: block; padding: 10px 0; }                  /* session names: the whole row height is the target */
+  :root[data-look="nebula"] summary.chip { display: inline-flex; align-items: center; min-height: 32px; padding: 6px 12px; }
+  :root[data-look="nebula"] :is(.receipt a, .page > a.hint) { display: inline-block; padding: 9px 0; }
+  :root[data-look="nebula"] input.field.num { height: 36px; }
+  :root[data-look="nebula"] :is(.strip, .sky-panel, .workview) code { overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; }
+
+  /* graph: four swipeable lines, then the map fills the rest of the screen */
+  :root[data-look="nebula"] .graphview { display: flex; flex-direction: column; height: calc(100dvh - 8px); padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+  :root[data-look="nebula"] .g-bar { flex: none; display: grid; gap: 8px; }
+  :root[data-look="nebula"] .g-row { display: flex; gap: 6px; align-items: center; min-width: 0; }
+  :root[data-look="nebula"] :is(.g-row-views, .g-row-filters) { overflow-x: auto; scrollbar-width: none; margin: 0 -10px; padding: 0 10px; scroll-snap-type: x proximity; }
+  :root[data-look="nebula"] :is(.g-row-views, .g-row-filters)::-webkit-scrollbar { display: none; }
+  :root[data-look="nebula"] :is(.g-row-views, .g-row-filters) > * { flex: none; scroll-snap-align: start; }
+  :root[data-look="nebula"] .g-row .g-filters { flex-wrap: nowrap; }
+  :root[data-look="nebula"] .g-row .seg button { white-space: nowrap; }
+  :root[data-look="nebula"] .g-row :is(.g-sq, .g-q) { flex: 1; min-width: 0; min-height: 40px; }
+  :root[data-look="nebula"] .g-row-tools .btn { padding-inline: 10px; }
+  :root[data-look="nebula"] .g-body { flex: 1; min-height: 0; }
+  :root[data-look="nebula"] .g-stage { height: 100%; }
+
+  /* chats: each session is a card row (name, seat, work item and activity; the resume setting when it applies) */
+  :root[data-look="nebula"] .sessions .table-wrap { overflow: visible; border: 0; background: none; }
+  :root[data-look="nebula"] .sessions .sess-table, :root[data-look="nebula"] .sessions .sess-table tbody { display: block; }
+  :root[data-look="nebula"] .sessions .sess-table thead { display: none; }
+  :root[data-look="nebula"] .sessions .sess-table tr { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto auto; gap: 2px 10px; align-items: center;
+    padding: 6px 2px; border-top: 1px solid var(--glass-line); }
+  :root[data-look="nebula"] .sessions .sess-table td { display: block; padding: 0; border: 0; min-width: 0; font-size: var(--t-xs); color: var(--ink-3); }
+  :root[data-look="nebula"] .sessions .sess-table td:empty { display: none; }
+  :root[data-look="nebula"] .sessions .sess-table td:nth-child(1) { grid-column: 1; grid-row: 1; font-size: 0; }
+  :root[data-look="nebula"] .sessions .sess-table td:nth-child(2) { grid-column: 2; grid-row: 1; font-size: var(--t-sm); color: var(--ink); }
+  :root[data-look="nebula"] .sessions .sess-table td:nth-child(2) a { display: block; padding: 10px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root[data-look="nebula"] .sessions .sess-table td:nth-child(3) { grid-column: 3; grid-row: 1; }
+  :root[data-look="nebula"] .sessions .sess-table td:nth-child(5) { grid-column: 4; grid-row: 1; text-align: right; min-width: 3ch; }
+  :root[data-look="nebula"] .sessions .sess-table td:nth-child(4) { grid-column: 2 / -1; grid-row: 2; margin-top: -6px; }
+  :root[data-look="nebula"] .sessions .sess-table td:is(:nth-child(6), :nth-child(7)) { display: none; }
+  :root[data-look="nebula"] .sessions .sess-table td:nth-child(8) { grid-column: 2 / -1; margin: 2px 0 6px; display: flex; align-items: center; gap: 10px; }
+  :root[data-look="nebula"] .sessions .sess-table td:nth-child(8)::before { content: "Limit resume"; }   /* the column header, hidden on a phone */
+  :root[data-look="nebula"] .sessions .sess-table td:nth-child(8):has(> .hint) { display: none; }
+  :root[data-look="nebula"] .sessions .sess-table select { height: 38px; }   /* iOS ignores min-height on a native select */
+  :root[data-look="nebula"] .sessions .chat-tools { flex-wrap: wrap; }
+  :root[data-look="nebula"] .sessions .chat-tools .field { flex: 1 1 100%; min-height: 40px; }
+}

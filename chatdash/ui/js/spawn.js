@@ -1,0 +1,71 @@
+// Spawn dialog: start a named background session on a work item. The user chooses the seat every time
+// : the suggested seat is preselected and every seat shows its headroom.
+import { h, toast, ct } from "./lib.js";
+import { get, post } from "./api.js";
+
+const BIG_WORDS = /\b(build|design|migrate|refactor|plan|research|new product)\b/i;
+export function interviewRule(brief) {
+  const words = (brief || "").trim().split(/\s+/).filter(Boolean).length;
+  if (words > 60) return `brief is ${words} words (over 60)`;
+  const m = (brief || "").match(BIG_WORDS);
+  return m ? `brief mentions "${m[0].toLowerCase()}"` : "";
+}
+
+function headroom(s) {
+  const f = s.five_hour.pct, w = s.seven_day.pct;
+  const part = (p, l) => (p == null ? `${l} ?` : `${l} ${Math.round(p)}%`);
+  return `${part(f, "5h")}, ${part(w, "7d")}${s.resume_at ? `, resumes ${ct(s.resume_at)}` : ""}`;
+}
+
+let dlg;
+export async function spawnDialog({ workItem, seat, parent, seats, onDone, brief: givenBrief, cwd, title }) {
+  let wi = null, brief = "";
+  try {
+    wi = workItem ? await get("workitems/" + encodeURIComponent(workItem)) : null;
+    const b = workItem ? await get("workitems/" + encodeURIComponent(workItem) + "/brief") : null;
+    brief = (b && b.brief) || "";
+  } catch { /* brief endpoint may not exist yet: start empty */ }
+  if (givenBrief) brief = givenBrief + (brief ? "\n\n" + brief : "");
+  const home = (wi && wi.home_seat) || null;
+  const pick = seat || home;
+  dlg = dlg || document.body.appendChild(h("dialog", { class: "spawn", "aria-label": "Start a session" }));
+  const sel = h("select", { id: "sp-seat", "aria-label": "Seat" }, seats.filter((s) => !s.excluded).map((s) =>
+    h("option", { value: s.seat, selected: s.seat === pick }, `${s.seat}${s.seat === home ? " (most spare)" : ""}: ${s.state}, ${headroom(s)}`)));
+  const ta = h("textarea", { id: "sp-brief", rows: "8", "aria-label": "Brief" });
+  ta.value = brief;
+  const why = h("span", { class: "hint" });
+  const iv = h("input", { type: "checkbox", id: "sp-iv" });
+  const sync = () => { const r = interviewRule(ta.value); why.textContent = r ? `on because the ${r}` : "off: short, routine brief"; iv.checked = !!r; };
+  ta.addEventListener("input", sync);
+  sync();
+  const warn = h("p", { class: "hint", id: "sp-warn" });
+  const seatWarn = () => {
+    const s = seats.find((x) => x.seat === sel.value);
+    warn.textContent = s && (s.state === "blocked" || s.state === "near")
+      ? `${s.seat} is ${s.state}: the session is queued and starts when the seat has headroom (it never moves to another seat by itself).` : "";
+  };
+  sel.addEventListener("change", seatWarn);
+  seatWarn();
+  const start = h("button", { class: "btn primary", onclick: async (e) => {
+    e.preventDefault();
+    start.disabled = true;
+    try {
+      const res = await post("sessions", { work_item: workItem, seat: sel.value, brief: ta.value.trim(), interview: iv.checked, parent, cwd });
+      toast(res.queued ? `Queued on ${sel.value}: starts when the seat has headroom` : `Started on ${sel.value} (job ${res.job_id || "?"})`);
+      dlg.close();
+      onDone && onDone(res);
+    } catch (err) {
+      toast(`Not started: ${err.message}${err.data && err.data.milestone ? ` (arrives in ${err.data.milestone})` : ""}`);
+    } finally { start.disabled = false; }
+  } }, "Start session");
+  dlg.replaceChildren(h("form", { method: "dialog", class: "spawn-form" },
+    h("h3", {}, title || (workItem ? `New session: ${(wi && wi.title) || workItem}` : "New session")),
+    parent && h("p", { class: "hint" }, `Child of ${parent}`),
+    cwd && h("p", { class: "hint" }, `Starts in ${cwd.replace(/^\/Users\/[^/]+/, "~")}`),
+    h("label", { for: "sp-seat" }, "Seat"), sel, warn,
+    h("label", { for: "sp-brief" }, "Brief (from the work item's state of play; edit freely)"), ta,
+    h("label", { for: "sp-iv", class: "row" }, iv, " Start with an interview (AskUserQuestion), then write the spec into the state doc"), why,
+    h("div", { class: "row" }, start, h("button", { class: "btn ghost", value: "cancel" }, "Cancel"))));
+  dlg.showModal();
+  ta.focus();
+}

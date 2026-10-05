@@ -19,11 +19,25 @@ Screenshots are not included yet (placeholder).
 
 Requires Python 3.10 or newer.
 
+Homebrew (macOS or Linux):
+
+```sh
+brew install Dv04/chatdash/chatdash
+```
+
+pipx:
+
 ```sh
 pipx install git+https://github.com/Dv04/chatdash
 ```
 
-or, from a checkout, `python3 -m pip install .`. You also need Claude Code itself (`claude` on your `PATH`).
+pip, in any virtualenv:
+
+```sh
+python3 -m pip install git+https://github.com/Dv04/chatdash
+```
+
+You also need Claude Code itself (`claude` on your `PATH`).
 
 ## Quick start
 

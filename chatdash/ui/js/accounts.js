@@ -74,7 +74,7 @@ export async function renderAccounts(el, ui, { firstRun = false } = {}) {
     return h("li", { class: "set-row acct" + (r.hidden ? " hidden-acct" : "") },
       h("div", { class: "set-text" },
         h("h3", {}, r.label, " ", status, r.hidden && h("span", { class: "chip" }, "disconnected"), r.read_only && h("span", { class: "chip ro" }, "read-only"),
-          r.running ? h("span", { class: "chip" }, `${r.running} running`) : ""),
+          r.running ? h("span", { class: "chip" }, `${r.running} Claude process${r.running === 1 ? "" : "es"} open`) : ""),
         h("p", { class: "hint" }, who || (r.signed_in ? "" : "Connect it to see its chats and limits here."), " ", h("code", {}, r.dir)),
         loginBox(r)),
       h("div", { class: "set-ctl acct-ctl" },
@@ -83,7 +83,7 @@ export async function renderAccounts(el, ui, { firstRun = false } = {}) {
         r.hidden ? h("button", { class: "btn", onclick: () => act(`accounts/${encodeURIComponent(r.name)}/reconnect`, {}, "Reconnected") }, "Reconnect")
           : h("button", { class: "btn ghost", title: "Hide this account from the board; its sign-in and chats are untouched",
             onclick: () => act(`accounts/${encodeURIComponent(r.name)}/disconnect`, {}, "Disconnected: hidden from the board") }, "Disconnect"),
-        h("button", { class: "btn ghost danger", disabled: r.running > 0, title: r.running ? "Stop its running chats first" : "", onclick: del },
+        h("button", { class: "btn ghost danger", disabled: r.running > 0, title: r.running ? "Close or stop its open Claude sessions first" : "", onclick: del },
           r.name === "main" ? "Sign out" : "Delete")));
   };
 

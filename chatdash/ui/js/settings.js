@@ -32,6 +32,8 @@ export async function renderSettings(el, ui) {
     h("div", { class: "set-text" },
       h("h3", {}, m.label, m.mode === "on" ? h("span", { class: "chip risk-low" }, "on") : m.mode === "dry-run" ? h("span", { class: "chip ro" }, "dry-run") : h("span", { class: "chip" }, "off")),
       h("p", { class: "hint" }, m.doc),
+      m.key === "decision_hook" && s.decision_hold_s != null &&
+        h("p", { class: "hint" }, `Hold: ${s.decision_hold_s} s (hook timeout 900 s; a 3400 s hold was measured to work).`),
       m.recent.length ? h("details", { class: "recent" }, h("summary", {}, `Last ${m.recent.length}: ${m.recent[0].decision}, ${age(Date.now() / 1000 - m.recent[0].at)} ago`),
         h("ul", {}, m.recent.map((r) => h("li", {}, h("span", { class: "at" }, ct(r.at, true)), " ", h("b", {}, r.decision), " ", r.reason))))
         : h("p", { class: "hint" }, "Nothing logged yet."),
@@ -73,8 +75,7 @@ export async function renderSettings(el, ui) {
     acctSec,
     h("section", { class: "group" }, h("h3", {}, "Automatic actions"),
       h("p", { class: "hint pad" }, "off: does nothing. dry-run: logs what it would do. on: acts. Permission prompts are never answered by any of these."),
-      h("ul", { class: "set-list" }, modes),
-      s.decision_hold_s != null && h("p", { class: "hint pad" }, `Question hold: ${s.decision_hold_s} s (hook timeout 900 s; a 3400 s hold was measured to work).`)),
+      h("ul", { class: "set-list" }, modes)),
     h("section", { class: "group" }, h("h3", {}, "Keep-warm"), h("ul", { class: "set-list" }, kwAuto, kwList)),
     h("section", { class: "group" }, h("h3", {}, "Weekly pace"),
       h("ul", { class: "set-list" }, h("li", { class: "set-row" },
@@ -125,7 +126,7 @@ export async function renderSessions(el, ui) {
     h("td", { class: "num" }, s.activity ? age(Date.now() / 1000 - s.activity) : "?"),
     h("td", {}, s.cache_age_min == null ? "" : `${s.warmth || ""} ${Math.round(s.cache_age_min)}m`),
     h("td", {}, s.kw && s.kw.on ? `on, ${s.kw.pings} pings` : ""),
-    h("td", {}, !s.resume.available ? h("span", { class: "hint" }, "n/a") :
+    h("td", { class: "lr" + ((s.resume.pref || "default") === "default" ? " lr-default" : "") }, !s.resume.available ? h("span", { class: "hint" }, "n/a") :
       h("select", { class: "field", "aria-label": `Limit resume for ${s.name}`, onchange: async (e) => {
         try { await post(`sessions/${encodeURIComponent(s.session_id)}/resume_pref`, { pref: e.target.value }); toast("Saved"); renderSessions(el, ui); }
         catch (err) { toast(`Not changed: ${err.message}`); } } },

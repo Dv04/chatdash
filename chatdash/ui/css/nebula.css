@@ -605,6 +605,8 @@ a.sky-go b { color: var(--nb-need-dot, var(--ink)); }
     padding: 6px 2px; border-top: 1px solid var(--glass-line); }
   :root[data-look="nebula"] .sessions .sess-table td { display: block; padding: 0; border: 0; min-width: 0; font-size: var(--t-xs); color: var(--ink-3); }
   :root[data-look="nebula"] .sessions .sess-table td:empty { display: none; }
+  /* phone: a chat left on the default limit-resume setting does not spend a second line on it (it is on the chat page) */
+  :root[data-look="nebula"] .sessions .sess-table td.lr.lr-default { display: none; }
   :root[data-look="nebula"] .sessions .sess-table td:nth-child(1) { grid-column: 1; grid-row: 1; font-size: 0; }
   :root[data-look="nebula"] .sessions .sess-table td:nth-child(2) { grid-column: 2; grid-row: 1; font-size: var(--t-sm); color: var(--ink); }
   :root[data-look="nebula"] .sessions .sess-table td:nth-child(2) a { display: block; padding: 10px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -581,6 +581,9 @@ def handle(method: str, path: str, query: dict, body: dict, src: "sources.Source
             return 200, {k: v for k, v in p.items() if k not in ("old",)}
         if head == "gx":
             return gx_get(parts[1:], q1, snap, now, dict(ctx, col=ctx.get("col") or getattr(src, "col", None)))
+        if head == "accounts" and len(parts) == 1:
+            from .. import accounts
+            return 200, {"accounts": accounts.listing()}
         if head == "settings":
             return 200, settings_view(ctx)
         if head == "sessions" and len(parts) == 1:
@@ -605,6 +608,26 @@ def handle(method: str, path: str, query: dict, body: dict, src: "sources.Source
             if not sid:
                 return 400, {"error": "session_id required"}
             return 200, {"receipts": receipts.latest(sid, int(q1("limit") or 20))}
+    if method == "POST" and head == "accounts":
+        # Connect / sign in / disconnect / delete. Sign-in runs Claude Code's own `claude auth login`; a code typed
+        # here goes to that prompt only. Read-only servers (no ctx) refuse, like every other action.
+        from .. import accounts
+        if not ctx.get("sender"):
+            return 501, {"error": "read-only server"}
+        name = parts[1] if len(parts) > 1 else str(body.get("name") or "").strip()
+        if not accounts.valid_name(name):
+            return 400, {"error": "name: lowercase letters, digits and dashes, up to 24 characters"}
+        verb = parts[2] if len(parts) > 2 else "login"
+        fn = {"login": lambda: accounts.start_login(name, bool(body.get("console"))),
+              "code": lambda: accounts.submit_code(name, str(body.get("code") or "")),
+              "cancel": lambda: accounts.cancel(name), "disconnect": lambda: accounts.disconnect(name),
+              "reconnect": lambda: accounts.reconnect(name),
+              "delete": lambda: accounts.delete(name, str(body.get("confirm") or ""))}.get(verb)
+        if not fn:
+            return 404, {"error": "unknown account action"}
+        res = fn()
+        db.log_auto("account", "manual", None, name, verb if res.get("ok") else "failed", res.get("error") or "", {})
+        return (200 if res.get("ok") else 409), res
     if method == "POST":
         if head == "decisions" and len(parts) == 3 and parts[2] == "answer":
             if not ctx.get("dialog"):

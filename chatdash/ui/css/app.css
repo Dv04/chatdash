@@ -655,3 +655,12 @@ dialog.palette::backdrop { background: oklch(0% 0 0 / .35); }
 .md table { border-collapse: collapse; font-size: var(--t-sm); }
 .md th, .md td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
 .md th { background: var(--panel-2); font-weight: 600; }
+
+/* accounts (js/accounts.js) */
+.accounts .acct-add { display: grid; gap: var(--s2); margin-top: var(--s2); }
+.accounts h4 { margin: var(--s4) 0 var(--s1); font-size: var(--t-md); }
+.accounts .acct-ctl { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
+.accounts .acct-login { margin-top: var(--s2); padding: var(--s3); border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); display: grid; gap: var(--s2); }
+.accounts .acct-err { color: var(--bad); margin-top: var(--s2); }
+.accounts .hidden-acct .set-text { opacity: .65; }
+.btn.danger { color: var(--bad); }

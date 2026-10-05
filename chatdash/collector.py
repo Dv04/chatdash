@@ -24,12 +24,11 @@ WINDOW_S = 24 * 3600
 
 
 def config_dirs() -> list[str]:
-    out = []
-    for d in sorted(glob.glob(os.path.join(HOME, ".claude*"))):
-        if os.path.isdir(d) and os.path.isdir(os.path.join(d, "projects")) \
-                and os.path.isdir(os.path.join(d, "sessions")):
-            out.append(d)
-    return out
+    """Connected accounts: every ~/.claude and ~/.claude-<name> with projects/ and sessions/, minus the ones
+    disconnected (hidden) in Settings > Accounts."""
+    from . import accounts
+    hid = accounts.hidden()
+    return [d for d in accounts.discovered() if accounts.account_name(d) not in hid]
 
 
 def workstream_of(name: str | None) -> str | None:

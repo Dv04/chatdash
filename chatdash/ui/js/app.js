@@ -1,4 +1,5 @@
 // chatdash v2 entry: feeds, render loop, keyboard, theme, focus mode, tab badge.
+import { renderAccounts } from "./accounts.js";
 import { Feed, put, get, TOKEN } from "./api.js";
 import { h, store, toast, age } from "./lib.js";
 import { renderRail, renderNeeds, renderSide, healthOf, splitNeeds } from "./board.js";
@@ -85,7 +86,7 @@ function onOverview(f) {
   const s = dataSig(f);
   if (s === ovSig && Date.now() - ovFullAt < 30000) {
     renderRail(rail, f.data, overview, ui);
-    ui.items = renderNeeds(main, f.data, ui);
+    ui.items = needsOrFirstRun(f.data);
     markCur(false);
     badge(f.data);
     return;
@@ -172,10 +173,22 @@ function focusDecision(id) {
   }
 }
 
+// No account connected yet (a fresh install): the NEEDS YOU column becomes the connect-your-account screen.
+let firstRunShown = false;
+function needsOrFirstRun(ov) {
+  const none = ov && !((ov.capacity && ov.capacity.seats) || []).length;
+  if (none) {
+    if (!firstRunShown) { firstRunShown = true; main.replaceChildren(); renderAccounts(main, ui, { firstRun: true }); }
+    return [];
+  }
+  if (firstRunShown) { firstRunShown = false; main.replaceChildren(); }
+  return renderNeeds(main, ov, ui);
+}
+
 function render() {
   const ov = overview.data;
   renderRail(rail, ov, overview, ui);
-  ui.items = renderNeeds(main, ov, ui);
+  ui.items = needsOrFirstRun(ov);
   if (route() === "board") renderProposals(props, ov, ui);
   renderCapacity(cap, ov, ui);
   renderSide(side, graph.data, ui);

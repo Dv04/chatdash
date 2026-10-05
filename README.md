@@ -20,10 +20,10 @@ Screenshots are not included yet (placeholder).
 Requires Python 3.10 or newer.
 
 ```sh
-pipx install .
+pipx install git+https://github.com/Dv04/chatdash
 ```
 
-or, from a checkout, `python3 -m pip install .`. A Homebrew tap is coming soon.
+or, from a checkout, `python3 -m pip install .`. You also need Claude Code itself (`claude` on your `PATH`).
 
 ## Quick start
 
@@ -35,6 +35,26 @@ Then open <http://127.0.0.1:8787/v2/>. `chatdash --help` lists the options (`--p
 
 On first run chatdash creates its data directory, `~/.config/chatdash` (or `$CHATDASH_HOME`), with mode 700, and an
 access token inside it (`.token`, mode 600). The page gets the token injected when it is served from loopback.
+
+## Connect your accounts
+
+Open **Settings > Accounts** (a fresh install opens on that screen). Type a name, for example `work`, and press
+**Connect account**. chatdash creates `~/.claude-work` and runs Claude Code's own `claude auth login` for it:
+a claude.com sign-in page opens in this computer's browser, you approve, and the account shows as signed in.
+From another device (the page on your phone, say), open the sign-in link shown there instead, approve, and paste
+the code claude.com shows; it is typed into Claude Code's own prompt.
+
+chatdash never sees, stores or sends your password or tokens: Claude Code writes its credentials into that
+account's folder exactly as when you sign in in a terminal. Accounts you already use (`~/.claude`, any
+`~/.claude-<name>`) appear by themselves.
+
+- **Disconnect** hides an account from the board; its sign-in and chats are untouched. **Reconnect** shows it again.
+- **Delete** signs the account out (`claude auth logout`) and moves its folder to the Trash. It needs you to type
+  the account name, and refuses while a chat on it is running. `~/.claude` (your default) is only signed out and
+  hidden, never moved.
+
+Use an account in a terminal with `CLAUDE_CONFIG_DIR=~/.claude-work claude`, or start chats from the board.
+Only connect accounts that are yours; Anthropic's terms do not allow sharing logins.
 
 ## Multi-account
 
@@ -57,6 +77,7 @@ Labels come from the directory name (`work` is shown as "Work"). Override them, 
 | `timezone` | this computer's | IANA name used to show clock times |
 | `meter_log` | `<data dir>/meter.log` | where usage readings come from (below) |
 | `public_url` | `""` | host name of a tunnel you set up yourself (below) |
+| `hidden_accounts` | `[]` | accounts disconnected in Settings > Accounts (not shown on the board) |
 | `plugins` | `{}` | optional helper modules, for example `{"usage_live": {"path": "/dir", "module": "usage_live"}}` |
 
 The binary is found from `$CLAUDE_BIN`, then `PATH`, then `~/.local/bin/claude`.

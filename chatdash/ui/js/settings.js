@@ -5,6 +5,7 @@
 import { h, ct, age, toast } from "./lib.js";
 import { get, put, post } from "./api.js";
 import { resumeSeg } from "./chat.js";
+import { renderAccounts } from "./accounts.js";
 
 const MODE_HELP = {
   off: "does nothing",
@@ -17,6 +18,9 @@ export async function renderSettings(el, ui) {
   let s;
   try { s = await get("settings"); } catch (e) { el.replaceChildren(h("div", { class: "page" }, h("div", { class: "empty" }, h("h3", {}, "Settings"), h("p", {}, e.message)))); return; }
   const redraw = () => renderSettings(el, ui);
+  const acctBox = h("div", {});
+  const acctSec = h("section", { class: "group", id: "accounts" }, h("h3", {}, "Accounts"), acctBox);
+  renderAccounts(acctBox, ui);
   const setMode = async (key, mode) => {
     if (mode === "on" && !confirm(`Turn ${key.replace("_", " ")} ON? It will act on live chats from its next tick.`)) return;
     try { await put("settings/modes", { [key]: mode }); toast(`${key}: ${mode}`); redraw(); }
@@ -64,6 +68,7 @@ export async function renderSettings(el, ui) {
   el.replaceChildren(h("div", { class: "page settings" },
     h("a", { href: "#/", class: "hint" }, "Board"), h("h1", {}, "Settings"),
     h("p", { class: "hint" }, "Changes apply on the next tick; nothing restarts. Every switch here is logged."),
+    acctSec,
     h("section", { class: "group" }, h("h3", {}, "Automatic actions"),
       h("p", { class: "hint pad" }, "off: does nothing. dry-run: logs what it would do. on: acts. Permission prompts are never answered by any of these."),
       h("ul", { class: "set-list" }, modes),

@@ -5,12 +5,10 @@
 import { h, toast } from "./lib.js";
 import { get, post } from "./api.js";
 
-let pollTimer = null;
-
 export async function renderAccounts(el, ui, { firstRun = false } = {}) {
-  clearTimeout(pollTimer);
+  clearTimeout(el._acctPoll);                // per panel: Settings and the first-run screen can both be open
   let rows;
-  try { rows = (await get("accounts")).accounts; }
+  try { rows = (await get("accounts")).accounts; ui && ui.accountsSeen && ui.accountsSeen(rows); }
   catch (e) { el.replaceChildren(h("p", { class: "hint" }, `Accounts unavailable: ${e.message}`)); return; }
   const redraw = () => renderAccounts(el, ui, { firstRun });
   const act = async (path, body, ok) => {
@@ -98,5 +96,5 @@ export async function renderAccounts(el, ui, { firstRun = false } = {}) {
     h("p", { class: "hint" }, "Each account gets its own folder, ~/.claude-<name>. Run chats on it with CLAUDE_CONFIG_DIR=~/.claude-<name> claude, or start them from the board.")));
 
   if (rows.some((r) => r.login && ["starting", "waiting"].includes(r.login.state)))
-    pollTimer = setTimeout(() => { if (el.isConnected && !el.contains(document.activeElement)) redraw(); else if (el.isConnected) pollTimer = setTimeout(redraw, 1500); }, 1500);
+    el._acctPoll = setTimeout(() => { if (el.isConnected && !el.contains(document.activeElement)) redraw(); else if (el.isConnected) el._acctPoll = setTimeout(redraw, 1500); }, 1500);
 }

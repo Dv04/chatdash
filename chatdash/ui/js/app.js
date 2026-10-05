@@ -173,11 +173,20 @@ function focusDecision(id) {
   }
 }
 
-// No account connected yet (a fresh install): the NEEDS YOU column becomes the connect-your-account screen.
-let firstRunShown = false;
+// No account connected yet (a fresh install), or none of them signed in (a sign-in was cancelled or not finished):
+// the NEEDS YOU column becomes the connect-your-account screen. Unknown status counts as signed in, so a failing
+// `claude auth status` never hides the board.
+let firstRunShown = false, acctUsable = null;
+ui.accountsSeen = (rows) => {
+  const v = rows.some((r) => !r.hidden && r.signed_in !== false);
+  if (v !== acctUsable) { acctUsable = v; render(); }
+};
+const checkAccounts = () => get("accounts").then((d) => ui.accountsSeen(d.accounts || [])).catch(() => {});
 function needsOrFirstRun(ov) {
-  const none = ov && !((ov.capacity && ov.capacity.seats) || []).length;
+  const none = ov && (!((ov.capacity && ov.capacity.seats) || []).length || acctUsable === false);
   if (none) {
+    // only while the board shows, so Settings never has a second, hidden account panel polling behind it
+    if (route() !== "board") { if (firstRunShown) { firstRunShown = false; main.replaceChildren(); } return []; }
     if (!firstRunShown) { firstRunShown = true; main.replaceChildren(); renderAccounts(main, ui, { firstRun: true }); }
     return [];
   }
@@ -414,4 +423,5 @@ if (window.EventSource && TOKEN) {
     }, 100);
   };
 }
-setInterval(render, 1000 * 15);    // ages and idle folding move even without new data
+setInterval(render, 1000 * 15);
+checkAccounts(); setInterval(() => { if (!document.hidden) checkAccounts(); }, 60000);    // ages and idle folding move even without new data

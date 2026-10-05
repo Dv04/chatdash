@@ -2,6 +2,7 @@
 // refresh never loses a selection or half-typed text.
 import { h, ct, splitParts, toast } from "./lib.js";
 import { post } from "./api.js";
+import { micFor } from "./dictate.js";
 import { RESUME_TEXT } from "./answer.js";
 
 export function draftOf(ui, id) {
@@ -191,7 +192,7 @@ function replyBox(x, d, ui) {
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && d.reply.trim()) { e.preventDefault(); ui.send(x, { text: d.reply.trim() }, d.reply.trim()); }
     } });
   ta.value = d.reply;
-  return h("div", { class: "replyrow" }, ta,
+  return h("div", { class: "replyrow" }, ta, micFor(ta),
     h("button", { class: "btn", onclick: () => d.reply.trim() && ui.send(x, { text: d.reply.trim() }, d.reply.trim()) }, "Reply"));
 }
 

@@ -314,7 +314,8 @@ aside > section { display: flex; flex-direction: column; gap: var(--s3); min-wid
 .undo { top: auto; bottom: var(--s5); right: var(--s5); }
 .confirm-list { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: var(--t-sm); max-height: 40vh; overflow: auto; }
 @media (max-width: 560px) {
-  .replyrow { flex-direction: column; }
+  .replyrow { flex-wrap: wrap; justify-content: flex-end; }
+  .replyrow > .reply { flex: 1 0 100%; }
   .undo { left: var(--s4); right: var(--s4); width: auto; }
 }
 
@@ -494,7 +495,7 @@ dialog.palette::backdrop { background: oklch(0% 0 0 / .35); }
 .e .io { display: grid; gap: var(--s1); margin-top: var(--s2); }
 .e pre { margin: 0; font: var(--t-xs)/1.45 var(--mono); background: var(--panel-2); padding: var(--s2); border-radius: 4px;
   white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
-.chat-reply { position: sticky; bottom: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s2); align-items: end;
+.chat-reply { position: sticky; bottom: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--s2); align-items: end;
   background: var(--bg); padding: var(--s2) 0 var(--s3); border-top: 1px solid var(--line); }
 .chat-reply .reply { width: 100%; box-sizing: border-box; font: inherit; padding: var(--s2); border-radius: var(--r);
   border: 1px solid var(--field); background: var(--panel); color: var(--ink); resize: vertical; }
@@ -536,7 +537,9 @@ dialog.palette::backdrop { background: oklch(0% 0 0 / .35); }
   .page { padding: var(--s3) var(--s4); }
   .set-row { flex-direction: column; }
   .nav a { padding: 6px 6px; font-size: var(--t-xs); }
-  .chat-reply { grid-template-columns: minmax(0, 1fr); }
+  .chat-reply { grid-template-columns: minmax(0, 1fr) auto; }
+  .chat-reply .reply { grid-column: 1 / -1; max-width: none; }
+  .chat-reply .mic { justify-self: end; }
 }
 .opt.go { border-color: var(--action); color: var(--action); font-weight: 600; }
 .seg .seg-lbl { padding: 4px 8px; font-size: var(--t-xs); color: var(--ink-3); border-right: 1px solid var(--line-strong); align-self: center; }
@@ -666,3 +669,11 @@ dialog.palette::backdrop { background: oklch(0% 0 0 / .35); }
 .accounts .acct-usage .btn { padding: 2px 10px; }
 .accounts .hidden-acct .set-text { opacity: .65; }
 .btn.danger { color: var(--bad); }
+
+/* Dictation (dictate.js): a mic beside every reply box; lit and pulsing while listening. */
+.btn.mic { padding: 6px 8px; flex: none; min-width: 40px; justify-content: center; }
+.btn.mic svg { width: 16px; height: 16px; }
+.btn.mic.on { color: var(--action); border-color: var(--action); animation: mic-pulse 1.4s ease-in-out infinite; }
+@keyframes mic-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--action) 45%, transparent); }
+  50% { box-shadow: 0 0 0 5px color-mix(in oklch, var(--action) 0%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .btn.mic.on { animation: none; } }

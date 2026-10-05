@@ -4,6 +4,7 @@
 import { h, ct, age, toast } from "./lib.js";
 import { md } from "./md.js";
 import { get, post } from "./api.js";
+import { micFor } from "./dictate.js";
 
 const PAGE = 250;
 const SHOW = { thinking: true, tools: true };
@@ -119,6 +120,7 @@ export class ChatView {
             onkeydown: (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); this.send(); } } }),
           h("button", { class: "btn primary", onclick: () => this.send() }, "Send"));
       const ta = this.box.querySelector("textarea");
+      if (ta) ta.after(micFor(ta));
       if (ta) ta.value = this.reply || "";
       this.pageEl = h("div", { class: "page chat" }, this.headSlot, h("div", { class: "chat-scroll" }, this.moreSlot, this.logSlot), this.box);
       this.el.replaceChildren(this.pageEl);

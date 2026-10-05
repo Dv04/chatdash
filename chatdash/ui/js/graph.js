@@ -4,6 +4,7 @@
 // graph (belongs_to, collides_with, waits_on). Idle sessions cluster into "N idle" until expanded.
 import { h, ct, age, toast } from "./lib.js";
 import { get } from "./api.js";
+import { micFor } from "./dictate.js";
 import { renderMode, MODES, filesBrowser } from "./gx.js";
 import { md } from "./md.js";
 
@@ -670,7 +671,7 @@ export class Graph {
         h("span", { class: "chip" }, `${rc.files} files`), rc.test && h("span", { class: "testline" }, rc.test),
         (rc.prs || []).map((u) => h("a", { href: u, target: "_blank", rel: "noopener noreferrer" }, u.replace(/^https:\/\/github.com\//, "")))),
       isS && n.needs_you && h("button", { class: "btn primary", onclick: () => ui.jumpTo(n.session_id) }, "Answer on the board"),
-      ta && h("div", { class: "replyrow" }, ta, h("button", { class: "btn", onclick: () => ta.value.trim() && ui.send(item, { text: ta.value.trim() }, ta.value.trim()) }, "Reply")),
+      ta && h("div", { class: "replyrow" }, ta, micFor(ta), h("button", { class: "btn", onclick: () => ta.value.trim() && ui.send(item, { text: ta.value.trim() }, ta.value.trim()) }, "Reply")),
       isS && !n.excluded && h("div", { class: "row" },
         h("a", { class: "btn", href: "#/chat/" + encodeURIComponent(n.session_id) }, "Chat history"),
         h("button", { class: "btn", onclick: () => ui.terminal(n) }, "Open terminal"),

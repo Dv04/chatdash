@@ -6,20 +6,9 @@ import { h, age, ct, toast } from "./lib.js";
 import { post } from "./api.js";
 import { describe } from "./palette.js";
 import { splitNeeds } from "./board.js";
+import { localReady } from "./dictate.js";
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-// On-device recognition (Chrome): available() says whether the language pack is there; install() fetches it.
-// Anything else (Safari, older Chrome) has no on-device switch, so recognition uses the browser's service.
-async function localReady() {
-  try {
-    if (!SR || typeof SR.available !== "function") return false;
-    const st = await SR.available({ langs: ["en-US"], processLocally: true });
-    if (st === "available") return true;
-    if ((st === "downloadable" || st === "downloading") && typeof SR.install === "function") return !!(await SR.install({ langs: ["en-US"], processLocally: true }));
-  } catch { /* fall through */ }
-  return false;
-}
 
 export class Voice {
   constructor(ui) {

@@ -2,6 +2,7 @@
 // : the suggested seat is preselected and every seat shows its headroom.
 import { h, toast, ct } from "./lib.js";
 import { get, post } from "./api.js";
+import { micFor } from "./dictate.js";
 
 const BIG_WORDS = /\b(build|design|migrate|refactor|plan|research|new product)\b/i;
 export function interviewRule(brief) {
@@ -63,7 +64,7 @@ export async function spawnDialog({ workItem, seat, parent, seats, onDone, brief
     parent && h("p", { class: "hint" }, `Child of ${parent}`),
     cwd && h("p", { class: "hint" }, `Starts in ${cwd.replace(/^\/Users\/[^/]+/, "~")}`),
     h("label", { for: "sp-seat" }, "Seat"), sel, warn,
-    h("label", { for: "sp-brief" }, "Brief (from the work item's state of play; edit freely)"), ta,
+    h("label", { for: "sp-brief" }, "Brief (from the work item's state of play; edit freely)"), h("div", { class: "replyrow" }, ta, micFor(ta)),
     h("label", { for: "sp-iv", class: "row" }, iv, " Start with an interview (AskUserQuestion), then write the spec into the state doc"), why,
     h("div", { class: "row" }, start, h("button", { class: "btn ghost", value: "cancel" }, "Cancel"))));
   dlg.showModal();

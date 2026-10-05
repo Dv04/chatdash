@@ -10,6 +10,7 @@ import os
 import plistlib
 import re
 import subprocess
+import sys
 
 from . import config
 
@@ -103,6 +104,8 @@ def is_protected(label: str) -> bool:
 
 def schedule_toggle(label: str, on: bool) -> dict:
     """Load (on) or unload (off) a launchd job with the configured prefix. The plist stays on disk either way."""
+    if sys.platform != "darwin":
+        return {"ok": False, "error": "launchd jobs exist on macOS only"}
     prefix = config.launchd_prefix()
     if not re.fullmatch(re.escape(prefix) + r"(\.[\w.-]+)?", label or ""):
         return {"ok": False, "error": f"not a {prefix} job"}

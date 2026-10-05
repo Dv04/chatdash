@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import threading
 import time
 
 import pytest
@@ -18,6 +19,12 @@ NOW = 100_000.0
 def tmp(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB", str(tmp_path / "cp.db"))
     db.init()
+    before = set(threading.enumerate())
+    yield
+    # A resume send runs on its own thread and writes its result last; let it finish before this test's database
+    # goes away (on a slower machine it outlived the test and logged "no such table: cp_resume").
+    for t in set(threading.enumerate()) - before:
+        t.join(timeout=5)
 
 
 def chat(**kw):

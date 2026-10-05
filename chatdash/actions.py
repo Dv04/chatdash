@@ -22,6 +22,7 @@ import pty
 import select
 import shlex
 import subprocess
+import sys
 import time
 
 from . import config
@@ -337,6 +338,8 @@ def open_terminal(chat: dict) -> dict:
     cd = f"cd {shlex.quote(chat.get('cwd') or config.default_cwd())} && "
     cmd = cd + envp + (f"claude attach {chat['job_id']}" if chat.get("job_id")
                        else f"claude --resume {chat['session_id']}")
+    if sys.platform != "darwin":
+        return {"ok": False, "cmd": cmd, "error": f"Opening a terminal from the page works on macOS only. Run: {cmd}"}
     script = f'tell application "Terminal" to do script {json_str(cmd)}\ntell application "Terminal" to activate'
     p = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=15)
     return {"ok": p.returncode == 0, "cmd": cmd, "error": p.stderr[-200:] if p.returncode else None}
@@ -347,5 +350,16 @@ def json_str(s: str) -> str:
 
 
 def notify(title: str, body: str) -> None:
-    script = f"display notification {json_str(body[:180])} with title {json_str(title[:60])}"
-    subprocess.Popen(["osascript", "-e", script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    """A desktop notification: macOS Notification Center, or notify-send on Linux; silently nothing elsewhere."""
+    import shutil
+    if sys.platform == "darwin":
+        script = f"display notification {json_str(body[:180])} with title {json_str(title[:60])}"
+        cmd = ["osascript", "-e", script]
+    elif shutil.which("notify-send"):
+        cmd = ["notify-send", title[:60], body[:180]]
+    else:
+        return
+    try:
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        pass

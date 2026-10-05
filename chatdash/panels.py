@@ -104,13 +104,13 @@ def is_protected(label: str) -> bool:
 
 def schedule_toggle(label: str, on: bool) -> dict:
     """Load (on) or unload (off) a launchd job with the configured prefix. The plist stays on disk either way."""
-    if sys.platform != "darwin":
-        return {"ok": False, "error": "launchd jobs exist on macOS only"}
     prefix = config.launchd_prefix()
     if not re.fullmatch(re.escape(prefix) + r"(\.[\w.-]+)?", label or ""):
         return {"ok": False, "error": f"not a {prefix} job"}
     if is_protected(label):
         return {"ok": False, "error": "this job runs the dashboard itself; turn it off from Terminal"}
+    if sys.platform != "darwin":
+        return {"ok": False, "error": "launchd jobs exist on macOS only"}
     plist = os.path.join(AGENTS, label + ".plist")
     if not os.path.exists(plist):
         return {"ok": False, "error": "no plist"}

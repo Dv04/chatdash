@@ -43,11 +43,11 @@ class Sender:
             db.log_auto("reply", "manual", c["session_id"], c["account"], "queued", "chat is working", {"text": text[:400]})
             return 200, {"ok": True, "queued": True, "confirmed": False}
         res = self.reply_fn(c, text)
-        db.log_auto("reply", "manual", c["session_id"], c["account"], "sent" if res.get("ok") else "failed",
+        db.log_auto("reply", "manual", c["session_id"], c["account"], ("queued" if res.get("queued") else "sent") if res.get("ok") else "failed",
                     res.get("error") or res.get("route") or "", {"text": text[:400], "result": res})
         if not res.get("ok"):
             return 409, {"error": res.get("error") or "not delivered", "route": res.get("route")}
-        return 200, {"ok": True, "queued": False, "confirmed": bool(res.get("confirmed")), "route": res.get("route")}
+        return 200, {"ok": True, "queued": bool(res.get("queued")), "confirmed": bool(res.get("confirmed")), "route": res.get("route")}
 
     def drain(self) -> list[dict]:
         """Send queued replies whose chat is no longer working. Called from the refresh loop."""

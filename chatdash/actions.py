@@ -90,8 +90,10 @@ def _input_ready(buf: bytes) -> bool:
 
 def _transcript_has(path: str, text: str, since_size: int, timeout: float, fd: int | None = None,
                     screen: list | None = None) -> bool:
-    """True once a user record containing `text` is appended after since_size. With `fd`, keeps reading the
-    attach pty while waiting (an unread pty can stall the client) and appends what it read to `screen`."""
+    """True once a user record containing `text` is appended after since_size; "queued" once the session's own
+    queue took it instead (an `enqueue` record: the chat was mid-turn, and the CLI types it in when the turn
+    ends, measured 2026-10-05: delivered 10 to 15 s later, after the attach client had closed). False on timeout.
+    With `fd`, keeps reading the attach pty while waiting and appends what it read to `screen`."""
     needle = text.strip()[:60]
     import json
     end = time.time() + timeout
@@ -100,7 +102,16 @@ def _transcript_has(path: str, text: str, since_size: int, timeout: float, fd: i
             if os.path.getsize(path) > since_size:
                 with open(path, "rb") as fh:
                     fh.seek(since_size)
+                    queued = False
                     for raw in fh.read().split(b"\n"):
+                        if b'"queue-operation"' in raw and b'"enqueue"' in raw:
+                            try:
+                                r = json.loads(raw)
+                            except ValueError:
+                                continue
+                            if r.get("operation") == "enqueue" and needle and needle in str(r.get("content") or ""):
+                                queued = True
+                            continue
                         if b'"type":"user"' not in raw and b'"type": "user"' not in raw:
                             continue
                         try:
@@ -112,6 +123,8 @@ def _transcript_has(path: str, text: str, since_size: int, timeout: float, fd: i
                             b.get("text", "") for b in (c or []) if isinstance(b, dict))
                         if needle and needle in s:
                             return True
+                    if queued:
+                        return "queued"
         except OSError:
             pass
         if fd is None:
@@ -185,9 +198,18 @@ def type_into_attach(cfg: str, job_id: str, text: str, cwd: str | None,
     finally:
         _close_attach(proc, fd)
     if landed is False:
+        # Seen 2026-10-05 (2 of about 60 sends, not reproduced since): Enter pressed in the last half second of the
+        # previous turn was neither submitted nor queued, and the message landed the moment the attach client
+        # closed. Look once more after closing, so a delivered message is not reported as failed (and resent).
+        landed = _transcript_has(transcript, text, size0, 3.0)
+        if landed:
+            return {"ok": True, "route": "attach", "queued": landed == "queued", "confirmed": landed is True,
+                    "late": True}
         tail = screen[-400:].decode(errors="replace")
         return {"ok": False, "route": "attach", "error": "prompt did not reach the transcript "
                 "within %ds; the session may be busy or showing a dialog" % confirm_s, "screen": tail}
+    if landed == "queued":
+        return {"ok": True, "route": "attach", "queued": True, "confirmed": False}
     return {"ok": True, "route": "attach", "confirmed": bool(landed)}
 
 

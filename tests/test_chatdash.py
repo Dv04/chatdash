@@ -101,6 +101,29 @@ class TestExtract(unittest.TestCase):
         self.assertEqual(t.pending_tool, "Bash: git push")
 
 
+class TestSendConfirm(unittest.TestCase):
+    """A send typed while the chat is mid-turn is taken by the session's own queue (an enqueue record) and
+    typed in when the turn ends; it must count as queued, not as a failed send (measured 2026-10-05)."""
+
+    def _write(self, recs):
+        f = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        f.write("\n".join(json.dumps(r) for r in recs) + "\n")
+        f.close()
+        self.addCleanup(os.unlink, f.name)
+        return f.name
+
+    def test_enqueue_record_counts_as_queued_and_user_record_as_landed(self):
+        from chatdash import actions
+        text = "reply with only the word OK, sent while the chat was working"
+        p = self._write([{"type": "queue-operation", "operation": "enqueue", "content": text}])
+        self.assertEqual(actions._transcript_has(p, text, 0, 0.3), "queued")
+        p = self._write([{"type": "queue-operation", "operation": "enqueue", "content": text},
+                         {"type": "queue-operation", "operation": "dequeue"},
+                         {"type": "user", "message": {"role": "user", "content": text}}])
+        self.assertIs(actions._transcript_has(p, text, 0, 0.3), True)
+        p = self._write([{"type": "queue-operation", "operation": "enqueue", "content": "some other message"}])
+        self.assertIs(actions._transcript_has(p, text, 0, 0.3), False)
+
 class TestDialogParse(unittest.TestCase):
     def test_permission_dialog(self):
         from chatdash import actions

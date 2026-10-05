@@ -127,7 +127,7 @@ export class Sky {
     for (const s of this.seats) {
       s.el = this.layer.appendChild(h("button", { class: "sky-cl k-" + s.kind, "aria-label": `${s.seat}: ${s.sub}. Fly in.`, onclick: () => this.flyTo(s.seat) },
         h("b", {}, s.seat), h("span", { class: "fig" }, s.left == null ? "?" : `${Math.round(s.left)}%`, s.left != null && h("small", {}, "left")),
-        h("em", {}, [s.kind === "unknown" ? "unknown" : s.kind === "out" ? (s.left < 1 ? "used up" : "nearly out") : "", s.readonly ? "read-only" : "",
+        h("em", {}, [s.kind === "unknown" ? (s.unk || "unknown") : s.kind === "out" ? (s.left < 1 ? "used up" : "nearly out") : "", s.readonly ? "read-only" : "",
           s.chats.length ? `${s.chats.length} running${s.needs ? `, ${s.needs} need${s.needs === 1 ? "s" : ""} you` : ""}` : ""].filter(Boolean).join(", "))));
       s.lights = s.chats.map((c) => ({ ...c, el: this.layer.appendChild(h("div", { class: "sky-lt" + (c.needs ? " need" : " quiet") }, c.label)) }));
     }

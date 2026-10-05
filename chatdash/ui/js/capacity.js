@@ -1,6 +1,6 @@
 // B3 capacity: per-seat 5h / 7d gauges with reset countdowns and resume chips, plus a next-24h planner.
 // Absence is never green: a missing or since-reset reading is drawn hatched amber and labelled "?".
-import { h, ct, age } from "./lib.js";
+import { h, ct, age, noReading } from "./lib.js";
 
 const SVGNS = "http://www.w3.org/2000/svg";
 function s(tag, attrs = {}, ...kids) {
@@ -84,7 +84,7 @@ export function renderCapacity(el, ov, ui) {
       x.queued && x.queued.length > 0 && h("span", { class: "chip" }, `${x.queued.length} stalled`)),
     bar(x.five_hour, "5h", now), bar(x.seven_day, "7d", now, paces.get(x.seat).expected),
     !x.excluded && paceLine(paces.get(x.seat), perDay, x),
-    h("div", { class: "hint" }, x.meter_age_min != null ? `meter reading ${x.meter_age_min} min old` : "no meter reading")));
+    h("div", { class: "hint" }, x.meter_age_min != null ? `meter reading ${x.meter_age_min} min old` : noReading(x))));
   el.replaceChildren(head, advice, h("div", { class: "group cap" }, ...rows), planner(seats, now, ui));
 }
 

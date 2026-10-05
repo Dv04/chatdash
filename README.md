@@ -4,7 +4,7 @@ A local web dashboard that shows every Claude Code chat across one or more confi
 
 - A board of what needs you: questions, permission prompts, blocked jobs, and chats stalled on a usage limit.
 - Reply to a chat from the page (one normal turn in that chat), stop it, or open it in Terminal.
-- Usage limits per account (5-hour and 7-day), shown as UNKNOWN when there is no reading, never as a guess.
+- Usage limits per account (5-hour and 7-day), set up when you connect the account; never a guess.
 - A graph of accounts, chats, work items and the files they touch.
 - Optional WebGL "nebula" look (Settings, Look). The default look is plain and needs no GPU.
 - Standard library only: no dependencies, no build step, no CDN.
@@ -84,14 +84,26 @@ The binary is found from `$CLAUDE_BIN`, then `PATH`, then `~/.local/bin/claude`.
 
 ## Usage limits
 
-chatdash does not call any usage endpoint. It reads a meter log that your Claude Code status line appends to:
-one tab-separated line per change, `ISO time`, `config dir`, `session id`, and the `rate_limits` JSON
-(`five_hour` and `seven_day`, each with `used_percentage` and `resets_at`).
-`contrib/statusline-meter.py` writes that file from the JSON a status line command receives on stdin.
+chatdash does not call any usage endpoint. Claude Code hands its status line command each account's limits
+(`rate_limits`: `five_hour` and `seven_day`, with `used_percentage` and `resets_at`), for every chat, background ones
+included. chatdash records them with a status line of its own:
 
-With no meter log, every account shows UNKNOWN. A reading whose reset time has passed shows "?" and "reset since
-the last reading", never 0%. An optional `usage_live` plugin module (`fetch_live(account_dir_name)` returning
-`{"five": pct, "seven": pct}`) can supply a fallback reading; without it nothing is fetched.
+- **Connecting an account** in Settings > Accounts turns it on when the account has no status line yet.
+- **Any other account** has a **Show usage** button there. If the account already has a status line, chatdash keeps
+  it: its own command runs first to record the limits, then yours runs with the same input and its output is what
+  your terminal shows. **Turn off**, Disconnect, or signing out `main` put your status line back exactly. A status
+  line you changed yourself afterwards is never touched.
+- Claude Code only runs the status line while a chat is open, so a new account shows "waiting for the first chat"
+  until it has run one. With the meter off, the board says "usage not connected" instead.
+
+The setting is the account's `settings.json` `statusLine` (your previous one is kept in `chatdash-statusline.json`
+beside it). The readings go to a meter log, one tab-separated line per change: `ISO time`, `config dir`,
+`session id`, `rate_limits` JSON. `chatdash-statusline` is the same command, if you prefer to call it from a status
+line script of your own, and `contrib/statusline-meter.py` is a standalone copy that only records.
+
+A reading whose reset time has passed shows "?" and "reset since the last reading", never 0%. An optional
+`usage_live` plugin module (`fetch_live(account_dir_name)` returning `{"five": pct, "seven": pct}`) can supply a
+fallback reading; without it nothing is fetched.
 
 ## Automatic actions
 
@@ -145,7 +157,7 @@ Tested with Claude Code 2.1.289 on macOS. If something looks wrong after an upda
 missing data; limits and health show UNKNOWN rather than OK when a source cannot be read.
 
 macOS-only parts: opening a chat in Terminal and notifications use `osascript`, and the Schedules panel uses `launchctl`.
-chatdash is developed and tested on macOS only.
+chatdash is developed on macOS; a clean pipx install on Linux was tested end to end (accounts, sign-in, board, nebula).
 
 ## Development
 

@@ -11,6 +11,7 @@
 
 import { makeNebula } from "./gl-nebula.js";
 import { splitNeeds } from "./board.js";
+import { noReading, unknownLabel } from "./lib.js";
 
 
 export const OUT_PCT = 95;
@@ -43,19 +44,20 @@ export function fieldModel(ov, graph, healthOk, now = Date.now() / 1000) {
   const out = names.map((name) => {
     const s = seats.find((x) => x.seat === name);
     const w = (s && s.seven_day) || {};
-    const why = !s ? "no capacity row" : w.pct == null ? (w.since_reset ? "reset since the reading" : "no reading")
+    const why = !s ? "no capacity row" : w.pct == null ? (w.since_reset ? "reset since the reading" : noReading(s))
       : w.resets_at && w.resets_at < now ? "reset since the reading" : null;
     const left = why ? null : Math.max(0, Math.min(100, 100 - w.pct));
     const kind = why ? "unknown" : w.pct >= OUT_PCT ? "out" : "ok";
     const used = kind === "out" && w.pct >= 100;
     const age = s && s.meter_age_min != null && s.meter_age_min > 60 ? s.meter_age_min : null;
-    const sub = (kind === "unknown" ? "unknown" : kind === "out" ? `${used ? "used up" : "nearly out"}, ${Math.round(left)}% left` : `${Math.round(left)}% left`)
+    const unk = kind === "unknown" ? (w.since_reset ? "unknown" : unknownLabel(s)) : null;
+    const sub = (kind === "unknown" ? unk : kind === "out" ? `${used ? "used up" : "nearly out"}, ${Math.round(left)}% left` : `${Math.round(left)}% left`)
       + (s && s.excluded ? ", read-only" : "") + (age ? `, reading ${age >= 120 ? Math.round(age / 60) + " h" : age + " min"} old` : "");
     const list = (chats.get(name) || []).sort((a, b) => b.needs - a.needs || a.id.localeCompare(b.id));
-    return { seat: name, kind, left, why, sub, readonly: !!(s && s.excluded), stale: age, hatched: kind === "unknown", chats: list,
+    return { seat: name, kind, left, why, sub, unk, readonly: !!(s && s.excluded), stale: age, hatched: kind === "unknown", chats: list,
       needs: list.filter((c) => c.needs).length };
   });
-  const sig = JSON.stringify([!!ov, !!healthOk, out.map((c) => [c.seat, c.kind, c.left == null ? null : Math.round(c.left), c.chats.map((x) => x.id + x.state)])]);
+  const sig = JSON.stringify([!!ov, !!healthOk, out.map((c) => [c.seat, c.kind, c.unk, c.left == null ? null : Math.round(c.left), c.chats.map((x) => x.id + x.state)])]);
   return { seats: out, ok: !!healthOk, loaded: !!ov, needs: out.reduce((t, c) => t + c.needs, 0),
     running: out.reduce((t, c) => t + c.chats.length, 0), sig };
 }
@@ -255,7 +257,7 @@ export class Field {
       v.className = "fig"; v.textContent = c.left == null ? "?" : Math.round(c.left) + "%";
       if (c.left != null) { const sm = v.appendChild(document.createElement("small")); sm.textContent = "left"; }
       const st = c.el.appendChild(document.createElement("em"));
-      st.textContent = [c.kind === "unknown" ? "unknown" : c.kind === "out" ? (c.left < 1 ? "used up" : "nearly out") : "", c.readonly ? "read-only" : "",
+      st.textContent = [c.kind === "unknown" ? (c.unk || "unknown") : c.kind === "out" ? (c.left < 1 ? "used up" : "nearly out") : "", c.readonly ? "read-only" : "",
         c.stale ? `reading ${c.stale >= 120 ? Math.round(c.stale / 60) + " h" : c.stale + " min"} old` : ""].filter(Boolean).join(", ");
       const k = c.el.appendChild(document.createElement("i"));      // phone: lights are unlabelled there, so the count is
       k.textContent = `${c.chats.length} running${c.needs ? `, ${c.needs} need${c.needs === 1 ? "s" : ""} you` : ""}`;

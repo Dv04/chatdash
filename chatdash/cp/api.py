@@ -622,11 +622,12 @@ def handle(method: str, path: str, query: dict, body: dict, src: "sources.Source
               "code": lambda: accounts.submit_code(name, str(body.get("code") or "")),
               "cancel": lambda: accounts.cancel(name), "disconnect": lambda: accounts.disconnect(name),
               "reconnect": lambda: accounts.reconnect(name),
+              "usage": lambda: accounts.usage(name, bool(body.get("on", True))),
               "delete": lambda: accounts.delete(name, str(body.get("confirm") or ""))}.get(verb)
         if not fn:
             return 404, {"error": "unknown account action"}
         res = fn()
-        if res.get("ok") and verb in ("disconnect", "reconnect", "delete"):
+        if res.get("ok") and verb in ("disconnect", "reconnect", "delete", "usage"):
             try:
                 src.refresh()                 # the board's accounts change now, not on the next 1.5 s refresh
             except Exception:

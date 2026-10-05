@@ -18,7 +18,7 @@ import os
 import threading
 import time
 
-from .. import collector, config
+from .. import collector, config, usage_meter
 from ..extract import iso_epoch
 
 from . import limits
@@ -246,7 +246,9 @@ class Sources:
         try:
             meter = self.meter.read()
             if not self.meter.ok:
-                errors["meter"] = "meter log not found (no status line is writing one)"
+                on = [collector.account_name(c) for c in collector.config_dirs() if usage_meter.meter_state(c) == "on"]
+                errors["meter"] = (f"no usage reading yet: waiting for the first chat on {', '.join(on)}" if on else
+                                   "usage not connected: turn it on per account in Settings > Accounts")
         except Exception as e:
             meter, errors["meter"] = {}, f"{type(e).__name__}: {e}"
         fleet = []
@@ -280,6 +282,7 @@ class Sources:
                 "five_hour": {"pct": five["pct"], "resets_at": five["resets_at"], "since_reset": five["since_reset"]},
                 "seven_day": {"pct": seven["pct"], "resets_at": seven["resets_at"], "since_reset": seven["since_reset"]},
                 "meter_at": m.get("at"), "meter_age_min": round((now - m["at"]) / 60) if m.get("at") else None,
+                "usage_meter": usage_meter.meter_state(cfg),
                 "state": state, "resume_at": resume_at, "resume_at_ct": limits.fmt_clock(resume_at),
                 "queued": [{"session_id": c["session_id"], "name": c["name"],
                             "resets_at": c["banner"]["resets_at"]} for c in stalled]})

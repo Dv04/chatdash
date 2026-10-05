@@ -97,3 +97,18 @@ export function splitParts(text) {
   for (let i = 1; i < idx.length; i++) if (idx[i].n !== idx[i - 1].n + 1) return [];
   return idx.map((p, i) => text.slice(p.at, i + 1 < idx.length ? idx[i + 1].start : undefined).trim().replace(/[;,]$/, ""));
 }
+
+// Why a seat has no usage reading, in words. The meter is chatdash's status line (usage_meter.py): "on" means the
+// account has not run a chat since it was set, "off" means nothing feeds its limits yet.
+export function noReading(s) {
+  if (!s) return "no capacity row";
+  if (s.usage_meter === "on") return "waiting for the first chat";
+  if (s.usage_meter === "off") return "usage not connected (Settings, Accounts)";
+  return "no meter reading";
+}
+// The short label on a seat with no reading (sky and board callouts).
+export function unknownLabel(s) {
+  if (s && !s.meter_at && s.usage_meter === "on") return "waiting for first chat";
+  if (s && !s.meter_at && s.usage_meter === "off") return "usage not connected";
+  return "unknown";
+}

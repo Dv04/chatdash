@@ -6,7 +6,10 @@ and finishes by itself when the owner approves there; it also prints a fallback 
 the board can type that code into the same prompt. chatdash never sees, stores or sends a password or token:
 the credentials are written by Claude Code into its own config dir, exactly as when you sign in in a terminal.
 
-Disconnect only hides an account from the board (its sign-in and chats are untouched). Delete signs the account
+Usage limits: connecting an account with no status line of its own turns on chatdash's status line meter
+(usage_meter.py), so its 5-hour and 7-day limits appear after its first chat; any account can turn it on or off
+from Settings. Disconnect only hides an account from the board (its sign-in and chats are untouched) and puts its
+own status line back; Reconnect turns the meter on again if it was on. Delete signs the account
 out with `claude auth logout` and moves its config dir to the Trash (never for ~/.claude, which is only signed
 out), and refuses while one of its chats is running.
 """
@@ -22,7 +25,7 @@ import subprocess
 import threading
 import time
 
-from . import config
+from . import config, usage_meter
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}$")
 URL_RE = re.compile(r"https://[^\s\x07\x1b\]]+")
@@ -116,7 +119,8 @@ def listing(with_status: bool = True) -> list[dict]:
         name = account_name(d)
         row = {"name": name, "label": config.account_label(name), "dir": d, "hidden": name in hid,
                "created_here": os.path.exists(os.path.join(d, MARK)), "read_only": config.is_read_only(name),
-               "running": _live(d), "login": _logins[name].view() if name in _logins else None}
+               "running": _live(d), "login": _logins[name].view() if name in _logins else None,
+               "usage_meter": usage_meter.status(d)}
         if with_status:
             row.update(auth_status(d))
         out.append(row)
@@ -135,16 +139,35 @@ def _save(key: str, value) -> None:
     os.replace(tmp, p)
 
 
+def _paused() -> set[str]:
+    v = config.get("meter_paused_accounts")
+    return {str(a) for a in v} if isinstance(v, (list, tuple)) else set()
+
+
 def disconnect(name: str) -> dict:
     if not any(account_name(d) == name for d in discovered()):
         return {"ok": False, "error": "no such account"}
     _save("hidden_accounts", sorted(hidden() | {name}))
+    if usage_meter.status(dir_of(name))["on"] and usage_meter.turn_off(dir_of(name)).get("ok"):
+        _save("meter_paused_accounts", sorted(_paused() | {name}))     # Reconnect turns it back on
     return {"ok": True, "hidden": True}
 
 
 def reconnect(name: str) -> dict:
     _save("hidden_accounts", sorted(hidden() - {name}))
+    if name in _paused():
+        usage_meter.turn_on(dir_of(name))
+        _save("meter_paused_accounts", sorted(_paused() - {name}))
     return {"ok": True, "hidden": False}
+
+
+def usage(name: str, on: bool) -> dict:
+    """Turn the status line meter on or off for one account (Settings > Accounts)."""
+    d = dir_of(name)
+    if not os.path.isdir(d):
+        return {"ok": False, "error": "no such account"}
+    _save("meter_paused_accounts", sorted(_paused() - {name}))
+    return usage_meter.turn_on(d) if on else usage_meter.turn_off(d)
 
 
 def delete(name: str, confirm: str) -> dict:
@@ -166,6 +189,7 @@ def delete(name: str, confirm: str) -> dict:
     if st.get("signed_in"):
         return {"ok": False, "error": "sign-out did not take effect; nothing was moved"}
     if name == "main":
+        usage_meter.turn_off(d)                    # ~/.claude stays: put its own status line back
         _save("hidden_accounts", sorted(hidden() | {name}))
         return {"ok": True, "signed_out": True, "moved_to": None,
                 "note": "~/.claude is your default Claude Code folder: signed out and hidden, not moved"}
@@ -294,6 +318,9 @@ def start_login(name: str, console: bool = False, restart: bool = False) -> dict
             open(os.path.join(d, MARK), "w").close()
         if name in hidden():
             reconnect(name)
+        st = usage_meter.status(d)
+        if not st["on"] and not st["other"] and not st["error"]:
+            usage_meter.turn_on(d)                 # nothing of the owner's to keep: limits show after the first chat
         try:
             _logins[name] = Login(name, d, console)
         except OSError as e:

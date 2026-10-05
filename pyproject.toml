@@ -23,6 +23,7 @@ dependencies = []          # standard library only
 chatdash = "chatdash.server:main"
 chatdash-ask-hook = "chatdash.cp.hooks.ask_hook:cli"
 chatdash-stop-hook = "chatdash.cp.hooks.stop_hook:cli"
+chatdash-statusline = "chatdash.statusline:main"
 
 [tool.setuptools]
 packages = ["chatdash", "chatdash.cp", "chatdash.cp.hooks"]

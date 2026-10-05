@@ -60,11 +60,24 @@ export async function renderAccounts(el, ui, { firstRun = false } = {}) {
         h("button", { class: "btn ghost", onclick: () => act(`accounts/${encodeURIComponent(r.name)}/cancel`, {}, "Cancelled") }, "Cancel")));
   };
 
+  // Usage limits come from chatdash's status line for this account (it keeps and still runs one the account had).
+  const usageLine = (r) => {
+    const m = r.usage_meter || {};
+    if (m.error) return h("p", { class: "acct-err" }, `Usage: ${m.error}`);
+    const n = encodeURIComponent(r.name);
+    if (m.on) return h("p", { class: "hint acct-usage" }, h("span", { class: "chip risk-low" }, "usage on"),
+      m.wrapped ? " Limits show after its next chat; your own status line still runs. " : " Limits show after its next chat. ",
+      h("button", { class: "btn ghost", onclick: () => act(`accounts/${n}/usage`, { on: false }, "Usage off: status line restored") }, "Turn off"));
+    return h("p", { class: "hint acct-usage" }, h("span", { class: "chip" }, "usage off"),
+      m.other ? " Its own status line stays and keeps running; chatdash adds the limits reading. " : " Shows this account's 5-hour and 7-day limits here. ",
+      h("button", { class: "btn", onclick: () => act(`accounts/${n}/usage`, { on: true }, "Usage on: limits show after its next chat") }, "Show usage"));
+  };
+
   const row = (r) => {
     const status = r.signed_in === true ? h("span", { class: "chip risk-low" }, "signed in")
       : r.signed_in === false ? h("span", { class: "chip risk-med" }, "not signed in")
       : h("span", { class: "chip ro", title: r.error || "" }, "status unknown");
-    const who = [r.email, r.plan && `${r.plan} plan`, r.method && r.method !== "claude.ai" && r.method].filter(Boolean).join(", ");
+    const who = [r.email, r.plan && `${r.plan} plan`, r.method && !["claude.ai", "none"].includes(r.method) && r.method].filter(Boolean).join(", ");
     const del = async () => {
       const typed = prompt(r.name === "main"
         ? `Sign out "main" (your default ~/.claude)? It is signed out and hidden, not deleted. Type main to confirm.`
@@ -77,6 +90,7 @@ export async function renderAccounts(el, ui, { firstRun = false } = {}) {
         h("h3", {}, r.label, " ", status, r.hidden && h("span", { class: "chip" }, "disconnected"), r.read_only && h("span", { class: "chip ro" }, "read-only"),
           r.running ? h("span", { class: "chip" }, `${r.running} Claude process${r.running === 1 ? "" : "es"} open`) : ""),
         h("p", { class: "hint" }, who || (r.signed_in ? "" : "Connect it to see its chats and limits here."), " ", h("code", {}, r.dir)),
+        usageLine(r),
         loginBox(r)),
       h("div", { class: "set-ctl acct-ctl" },
         r.signed_in !== true && !(r.login && ["starting", "waiting"].includes(r.login.state)) &&

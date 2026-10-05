@@ -1,5 +1,5 @@
 // Mission board (B1): status rail, NEEDS YOU strips, work items and sessions.
-import { h, icon, age, ageParts, ct, store, toast } from "./lib.js";
+import { h, icon, age, ageParts, ct, store, toast, noReading } from "./lib.js";
 import { md } from "./md.js";
 import { post } from "./api.js";
 import { cardBody, timeoutLine, lowRiskRecommended } from "./cards.js";
@@ -172,7 +172,7 @@ function pct(w) { return w.pct == null ? "?" : `${Math.round(w.pct)}%`; }
 function seatChip(s) {
   const tip = [`${s.label}: ${s.state}`, `5h ${pct(s.five_hour)}${s.five_hour.resets_at ? `, resets ${ct(s.five_hour.resets_at)}` : ""}`,
     `7d ${pct(s.seven_day)}${s.seven_day.resets_at ? `, resets ${ct(s.seven_day.resets_at, true)}` : ""}`,
-    s.meter_age_min != null ? `reading ${s.meter_age_min} min old` : "no meter reading",
+    s.meter_age_min != null ? `reading ${s.meter_age_min} min old` : noReading(s),
     s.excluded ? "read-only account: nothing here acts on it" : ""].filter(Boolean).join("\n");
   return h("div", { class: "seat " + s.state, role: "listitem", title: tip },
     h("span", { class: "name" }, h("span", { class: "dot", "aria-hidden": "true" }), s.seat,

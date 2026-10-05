@@ -24,19 +24,18 @@ export function pace(x, now, perDay) {
   return { state, expected, used: w.pct, left, daysLeft, perDayLeft, extra };
 }
 function paceLine(p, perDay, x) {
-  if (p.state === "unknown") return h("div", { class: "pace unknown" }, `Pace: unknown (${p.why})`);
+  if (p.state === "unknown") return h("div", { class: "pace unknown" }, h("span", { class: "pace-tag" }, "Pace unknown"), ` ${p.why}`);
   const short = p.daysLeft < 1;
-  const rate = short ? `${Math.round(p.left)}% left, 7d resets in ${Math.max(1, Math.round(p.daysLeft * 24))} h`
-    : `${Math.round(p.perDayLeft)}% a day left for ${p.daysLeft.toFixed(1)} days`;
-  const txt = p.state === "spent" ? "7-day limit used up"
-    : p.state === "use" ? `Use first: ${rate}${short ? "" : ` (target ${perDay}%)`}, about ${Math.round(p.extra)}% spare`
-    : p.state === "slow" ? `Ahead of pace: ${rate}${short ? "" : ` (target ${perDay}%)`}`
-    : `On pace: ${rate}`;
+  const rate = short ? `${Math.round(p.left)}% left, resets in ${Math.max(1, Math.round(p.daysLeft * 24))} h`
+    : `${Math.round(p.perDayLeft)}% a day for ${p.daysLeft.toFixed(1)} days`;
+  const tag = { spent: "Used up", use: "Use first", slow: "Ahead of pace", on: "On pace" }[p.state];
+  const detail = p.state === "spent" ? "" : p.state === "use" ? `${Math.round(p.extra)}% spare, ${rate}` : rate;
   const five = (x.five_hour || {}).pct;
   const fiveFull = five != null && five >= 100 && p.state !== "spent";
-  return h("div", { class: "pace " + p.state, title: `By now an even pace would have used about ${Math.round(p.expected)}%; used ${Math.round(p.used)}%.` },
-    txt, fiveFull && h("span", { class: "pace-5h" }, `, but the 5h window is full${x.resume_at ? ` until ${ct(x.resume_at)}` : ""}`),
-    h("span", { class: "hint" }, ` (should be near ${Math.round(p.expected)}% by now, at ${Math.round(p.used)}%)`));
+  // One status word in colour, the numbers in plain ink; the even-pace arithmetic lives in the tooltip.
+  return h("div", { class: "pace " + p.state, title: `Target ${perDay}% a day. By now an even pace would have used about ${Math.round(p.expected)}%; used ${Math.round(p.used)}%.` },
+    h("span", { class: "pace-tag" }, tag), detail && ` ${detail}`,
+    fiveFull && h("span", { class: "chip pace-5h" }, `5h full${x.resume_at ? ` until ${ct(x.resume_at)}` : ""}`));
 }
 
 function bar(w, label, now, mark) {
@@ -69,7 +68,7 @@ export function renderCapacity(el, ov, ui) {
   const paces = new Map((seats || []).map((x) => [x.seat, pace(x, now, perDay)]));
   const useFirst = (seats || []).filter((x) => !x.excluded && paces.get(x.seat).state === "use").sort((a, b) => paces.get(b.seat).extra - paces.get(a.seat).extra);
   const head = h("div", { class: "section-head" }, h("h2", {}, "Capacity"),
-    h("span", { class: "meta" }, seats ? `nearest 7d reset first; ${seats.filter((x) => x.state === "blocked").length} blocked, ${seats.filter((x) => x.state === "unknown").length} unknown` : ""));
+    h("span", { class: "meta" }, seats ? [`soonest 7-day reset first`, ...[["blocked", "blocked"], ["unknown", "no reading"]].map(([st, w]) => { const k = seats.filter((x) => x.state === st).length; return k ? `${k} ${w}` : ""; })].filter(Boolean).join(", ") : ""));
   if (!seats) { el.replaceChildren(head, h("div", { class: "skeleton" })); return; }
   const advice = h("p", { class: "pace-advice" }, useFirst.length
     ? ["Use first (behind the ", perDay, "% a day pace): ", useFirst.map((x, i) => [i ? ", " : "", h("b", {}, x.seat), ` +${Math.round(paces.get(x.seat).extra)}%`,

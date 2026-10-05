@@ -14,6 +14,14 @@ export class ChatView {
     this.el = el; this.ui = ui; this.sid = null; this.entries = []; this.start = 0; this.total = 0;
     this.timer = null; this.filter = "";
     this.show = { ...SHOW, ...(ui.store.get("chatShow", {})) };
+    // "N new" jump button: shown when entries arrive while you are reading further up; gone once you reach the end.
+    this.jump = h("button", { class: "btn jump-new", hidden: true, onclick: () => this.toEnd() });
+    window.addEventListener("scroll", () => { if (!this.jump.hidden && this.nearEnd()) this.jump.hidden = true; }, { passive: true });
+  }
+  nearEnd() { const de = document.documentElement; return de.scrollHeight - window.scrollY - window.innerHeight < 160; }
+  toEnd() {
+    this.jump.hidden = true;
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }
 
   async open(sid) {
@@ -42,14 +50,17 @@ export class ChatView {
       const changed = d.total !== this.total || JSON.stringify(d.session) !== JSON.stringify(this.session) ||
         (d.entries.length && JSON.stringify(d.entries[d.entries.length - 1]) !== JSON.stringify(this.entries[this.entries.length - 1]));
       if (!changed) return;
-      const de = document.documentElement;
-      const atBottom = de.scrollHeight - window.scrollY - window.innerHeight < 160;
+      const atBottom = this.nearEnd(), fresh = Math.max(0, d.total - this.total);
       // keep older pages already loaded; replace the tail from the server
       const keep = this.entries.filter((e) => e.i < d.start);
       this.entries = keep.concat(d.entries);
       this.start = keep.length ? this.start : d.start;
       this.total = d.total; this.session = d.session; this.counts = d.counts;
       this.render(atBottom);
+      if (!atBottom && fresh) {
+        this.unseen = (this.jump.hidden ? 0 : this.unseen || 0) + fresh;
+        this.jump.textContent = `${this.unseen} new \u2193`; this.jump.hidden = false;
+      }
     } catch { /* the rail shows feed health; a missed poll is retried */ }
   }
 
@@ -122,14 +133,16 @@ export class ChatView {
       const ta = this.box.querySelector("textarea");
       if (ta) ta.after(micFor(ta));
       if (ta) ta.value = this.reply || "";
-      this.pageEl = h("div", { class: "page chat" }, this.headSlot, h("div", { class: "chat-scroll" }, this.moreSlot, this.logSlot), this.box);
+      this.jump.hidden = true;
+      this.pageEl = h("div", { class: "page chat" }, this.headSlot, h("div", { class: "chat-scroll" }, this.moreSlot, this.logSlot), this.jump, this.box);
       this.el.replaceChildren(this.pageEl);
     }
     const ta = this.box.querySelector("textarea");
     if (ta) ta.placeholder = s.live ? "Reply to this chat (Cmd+Enter sends)" : "This chat is not running; a reply resumes it in the background";
     if (!this.headSlot.contains(document.activeElement) || !this.headSlot.firstChild) this.headSlot.replaceChildren(head);
     this.moreSlot.replaceChildren(more || "");
-    this.logSlot.replaceChildren(this.log);
+    this.logSlot.replaceChildren(this.log,
+      s.live && s.state === "working" ? h("p", { class: "chat-working", role: "status" }, h("i", {}), h("i", {}), h("i", {}), " Claude is working") : "");
     this.paint();
     requestAnimationFrame(() => window.scrollTo(0, toBottom ? document.documentElement.scrollHeight : y));
   }
@@ -176,6 +189,7 @@ function when(ts) { const t = Date.parse(ts); return isNaN(t) ? "" : ct(t / 1000
 
 function entry(e) {
   const t = h("span", { class: "at" }, when(e.ts));
+  if (e.kind === "user" && /^\s*<task-notification>/.test(e.text || "")) return taskEvent(e, t);
   if (e.kind === "user") return h("li", { class: "e user" + (e.command ? " cmd" : "") }, h("div", { class: "lbl" }, "You", t), h("div", { class: "txt" }, e.text));
   if (e.kind === "text") return h("li", { class: "e text" }, h("div", { class: "lbl" }, "Claude", t), md(e.text, "txt md"));
   if (e.kind === "thinking") return h("li", { class: "e thinking" },
@@ -191,3 +205,14 @@ function entry(e) {
 }
 
 export { age };
+
+// A background task's completion notice is injected into the chat as a user turn, but Dev never typed it: show it
+// as a one-line event (status and summary) that opens to the raw notice, not as "You" with raw XML.
+function taskEvent(e, t) {
+  const tag = (k) => { const m = new RegExp(`<${k}>([\\s\\S]*?)</${k}>`).exec(e.text); return m ? m[1].trim() : ""; };
+  const status = tag("status"), summary = tag("summary") || tag("event") || "Background task update";
+  return h("li", { class: "e notice task-ev" + (status === "failed" ? " err" : "") },
+    h("details", {}, h("summary", { class: "lbl" }, status === "failed" ? "Task failed" : status ? `Task ${status}` : "Task event", t,
+      h("span", { class: "ev-sum" }, summary.replace(/^Background command "?|"? completed \(exit code \d+\)$/g, ""))),
+      h("pre", { class: "txt" }, e.text.trim())));
+}

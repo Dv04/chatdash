@@ -143,7 +143,10 @@ function applyRoute() {
   if (r === "sessions") { renderSessions(lsec, ui); sessTimer = setInterval(() => renderSessions(lsec, ui), 10000); }
   // Measure the field only after the new view is shown and scrolled to its top: measured first, the board's nebula
   // was placed at the previous view's scroll offset (847 px down after Graph) and looked missing.
-  if (r !== prevRoute) window.scrollTo(0, 0);
+  if (r !== prevRoute) {
+    window.scrollTo(0, 0);
+    if (ui.voice && !ui.voice.on && !ui.voice.panel.hidden) ui.voice.panel.hidden = true;   // an idle Voice menu does not follow you
+  }
   prevRoute = r;
   nebula.apply();
   if (r === "work") renderWorkItem(wsec, decodeURIComponent(location.hash.slice(7)), ui);
@@ -217,6 +220,8 @@ function badge(ov) {
   document.title = (n ? `(${n}) ` : "") + (hl.ok ? "" : "UNKNOWN ") + "Mission board";
   if (key === lastBadge) return;
   lastBadge = key;
+  // installed as an app (home screen / dock): the same count as an icon badge
+  if ("setAppBadge" in navigator) (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
   const c = document.createElement("canvas");
   c.width = c.height = 64;
   const g = c.getContext("2d");
@@ -364,7 +369,10 @@ document.addEventListener("keydown", (e) => {
   else if (k === ",") location.hash = route() === "settings" ? "#/" : "#/settings";
   else if (k === "?") showKeys();
   else if (k === "b") ui.voice.briefing();
-  else if (k === "Escape" && pop) pop.hidden = true;
+  else if (k === "Escape") {
+    if (pop) pop.hidden = true;
+    if (ui.voice && !ui.voice.panel.hidden) ui.voice.stop();     // the Voice menu closes like every other pop
+  }
 });
 
 // ------------------------------------------------------------------ palette and voice commands

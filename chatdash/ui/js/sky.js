@@ -303,9 +303,10 @@ export class Sky {
     const n = ov ? splitNeeds(ov).now.length : null, c = (ov && ov.counts) || {};
     this.hud.replaceChildren(
       h("span", { class: "sky-health " + (ok ? "ok" : "unknown") }, h("i", {}), ok ? "OK" : "UNKNOWN"),
-      h("span", { class: "sky-count" }, h("b", {}, n ?? "?"), " need you"),
+      n ? h("a", { class: "sky-count sky-go", href: "#/", title: "Open the board's NEEDS YOU list" }, h("b", {}, n), " need you")
+        : h("span", { class: "sky-count" }, h("b", {}, n ?? "?"), " need you"),
       h("span", { class: "sky-count" }, h("b", {}, c.sessions_working ?? "?"), " working"),
-      this.focus ? h("button", { class: "sky-back", onclick: () => this.unfocus() }, "Back out", h("kbd", {}, "Esc")) : h("span", { class: "sky-hint" }, "Click a seat to fly in"));
+      this.focus ? h("button", { class: "sky-back", onclick: () => this.unfocus() }, "Back out", h("kbd", {}, "Esc")) : h("span", { class: "sky-hint" }, "Click a seat, or ", h("kbd", {}, "←"), h("kbd", {}, "→"), " to fly between seats"));
   }
 
   panelRender() {

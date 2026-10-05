@@ -251,6 +251,8 @@
   :root[data-look="nebula"][data-view="board"] #side { grid-row: 3; }
   :root[data-look="nebula"][data-view="board"] #cap { grid-row: 4; }
   :root[data-look="nebula"] .nb-capsule { flex-direction: row; left: 50%; top: auto; bottom: max(10px, env(safe-area-inset-bottom));
+    /* phone: page text scrolls under the bar; a denser fill keeps it from ghosting through (no blur: GPU) */
+    background: color-mix(in srgb, var(--glass-capsule) 45%, var(--bg) 55%);
     transform: translateX(-50%); }
   .nb-capsule a { width: 64px; }
   .nb-lt { display: none; }
@@ -395,7 +397,7 @@
 :root[data-look="nebula"][data-view="sky"] body { background: radial-gradient(70% 60% at 50% 42%, var(--nb-void-2), var(--nb-void) 75%) var(--nb-void); overflow: hidden; }
 :root[data-look="nebula"][data-view="sky"] .rail { display: none; }
 .sky-gl { position: absolute; inset: 0; width: 100%; height: 100%; }
-.sky-labels { position: absolute; inset: 0; pointer-events: none; }
+.sky-labels { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
 .sky-cl, .sky-lt { position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform; }
 .sky-cl { pointer-events: auto; display: grid; justify-items: center; gap: 0; padding: 4px 10px 5px; border: 0; border-radius: 14px; cursor: pointer;
   background: var(--nb-chip); color: var(--nb-label); font: inherit; text-align: center; transition: background .25s var(--ease), box-shadow .25s var(--ease); }
@@ -419,10 +421,14 @@
 .sky-health.ok { color: var(--ok); }
 .sky-health.unknown { color: var(--warn); }
 .sky-hint { color: var(--ink-3); font-size: var(--t-xs); }
+.sky-hint kbd { margin: 0 2px; }
+a.sky-go { color: inherit; text-decoration: none; border-radius: 999px; padding: 2px 8px; margin: -2px -8px; }
+a.sky-go:hover, a.sky-go:focus-visible { background: var(--glass-panel-2); }
+a.sky-go b { color: var(--nb-need-dot, var(--ink)); }
 .sky-back { display: inline-flex; gap: 8px; align-items: center; padding: 3px 4px 3px 10px; border: 0; border-radius: 999px; background: var(--glass-panel-2); color: var(--ink); font: inherit; font-size: var(--t-xs); font-weight: 600; cursor: pointer; }
 .sky-back kbd { font: 600 0.65rem var(--mono); padding: 2px 6px; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--glass-line-strong); }
 
-.sky-panel { position: absolute; right: 24px; top: 24px; bottom: 24px; width: min(380px, 34vw); overflow: auto; padding: 22px 22px 24px; border-radius: 28px;
+.sky-panel { position: absolute; z-index: 4; right: 24px; top: 24px; bottom: 24px; width: min(380px, 34vw); overflow: auto; padding: 22px 22px 24px; border-radius: 28px;
   background: var(--glass); backdrop-filter: blur(26px) saturate(1.5); -webkit-backdrop-filter: blur(26px) saturate(1.5);
   box-shadow: inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px var(--glass-line), 0 40px 70px -24px var(--glass-shadow);
   animation: sky-in .8s var(--spring, cubic-bezier(.16,1,.3,1)) both; }
@@ -512,6 +518,10 @@
 :root[data-look="nebula"] .g-panel, :root[data-look="nebula"] .g-menu, :root[data-look="nebula"] .g-tip { border: 0; border-radius: 20px; background: var(--glass-capsule);
   box-shadow: inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px var(--glass-line), 0 24px 50px -16px var(--glass-shadow); }
 :root[data-look="nebula"] .g-mini { border: 0; border-radius: 14px; background: var(--glass-capsule); box-shadow: inset 0 0 0 1px var(--glass-line); }
+/* Table view: its own glass window under the map (was unstyled text over the sky, flush against the canvas) */
+:root[data-look="nebula"] .g-table { flex: none; max-height: 38vh; border: 0; border-radius: 20px; padding: 4px 10px; background: var(--glass);
+  box-shadow: inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px var(--glass-line); }
+:root[data-look="nebula"] .g-table th { position: sticky; top: 0; background: var(--glass-capsule); }
 :root[data-look="nebula"] .g-filters .chip, :root[data-look="nebula"] .chip.toggle { border: 0; padding: 4px 10px; border-radius: 999px; background: var(--glass-panel); }
 :root[data-look="nebula"] .chip.toggle[aria-pressed="true"] { background: var(--seg-on); color: var(--seg-on-ink); box-shadow: var(--seg-on-shadow); }
 
@@ -576,6 +586,9 @@
   :root[data-look="nebula"] .g-row { display: flex; gap: 6px; align-items: center; min-width: 0; }
   :root[data-look="nebula"] :is(.g-row-views, .g-row-filters) { overflow-x: auto; scrollbar-width: none; margin: 0 -10px; padding: 0 10px; scroll-snap-type: x proximity; }
   :root[data-look="nebula"] :is(.g-row-views, .g-row-filters)::-webkit-scrollbar { display: none; }
+  /* swipeable rows: fade the right edge so it reads as "more this way" */
+  :root[data-look="nebula"] :is(.g-row-views, .g-row-filters) { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); }
   :root[data-look="nebula"] :is(.g-row-views, .g-row-filters) > * { flex: none; scroll-snap-align: start; }
   :root[data-look="nebula"] .g-row .g-filters { flex-wrap: nowrap; }
   :root[data-look="nebula"] .g-row .seg button { white-space: nowrap; }

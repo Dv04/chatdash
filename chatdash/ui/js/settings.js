@@ -7,6 +7,8 @@ import { get, put, post } from "./api.js";
 import { resumeSeg } from "./chat.js";
 import { renderAccounts } from "./accounts.js";
 
+const LOOK_NAME = { current: "Plain", nebula: "Nebula" };   // stored values stay "current" / "nebula"
+
 const MODE_HELP = {
   off: "does nothing",
   "dry-run": "logs what it would do, acts on nothing",
@@ -82,12 +84,12 @@ export async function renderSettings(el, ui) {
         paceEditor(s, redraw, ui)))),
     h("section", { class: "group" }, h("h3", {}, "Look"),
       h("ul", { class: "set-list" }, h("li", { class: "set-row" },
-        h("div", { class: "set-text" }, h("h3", {}, "Look", h("span", { class: "chip" }, ui.look())),
-          h("p", { class: "hint" }, "Stored in this browser only. Nebula is the new look for every view (Sky, board, graph, chats, settings); current is the default. ",
-            "?look=nebula in the address switches it for one visit.")),
+        h("div", { class: "set-text" }, h("h3", {}, "Look", h("span", { class: "chip" }, LOOK_NAME[ui.look()] || ui.look())),
+          h("p", { class: "hint", title: "?look=current or ?look=nebula in the address switches it for one visit" },
+            "Plain is the default and needs no GPU; Nebula is the WebGL2 night-sky look for every view. Saved in this browser only.")),
         h("div", { class: "seg", role: "radiogroup", "aria-label": "Board look" },
           ["current", "nebula"].map((v) => h("button", { role: "radio", "aria-checked": String(ui.look() === v), "aria-pressed": String(ui.look() === v),
-            onclick: () => { if (ui.look() !== v) { ui.setLook(v); redraw(); } } }, v)))))),
+            onclick: () => { if (ui.look() !== v) { ui.setLook(v); redraw(); } } }, LOOK_NAME[v])))))),
     h("section", { class: "group" }, h("h3", {}, "Notifications"),
       h("ul", { class: "set-list" }, h("li", { class: "set-row" },
         h("div", { class: "set-text" }, h("h3", {}, "Focus mode", h("span", { class: "chip " + (f.on ? "risk-low" : "") }, f.on ? "on" : "off")),

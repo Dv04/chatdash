@@ -337,7 +337,13 @@ export function renderSide(el, graph, ui) {
     ["work item", "seat"].map((m) => h("button", { "aria-pressed": String(mode === m), onclick: () => ui.setGroup(m) }, m)));
   const head = h("div", { class: "section-head" }, h("h2", {}, "Sessions"), h("span", { class: "grow" }), seg);
   if (!graph) { el.replaceChildren(head, h("div", { class: "skeleton" })); return; }
-  const sessions = graph.nodes.filter((n) => n.type === "session");
+  // A filter that survives the 1.5 s refresh: the input node is kept, only the lists around it are rebuilt.
+  const filt = el._filt || (el._filt = h("input", { type: "search", class: "free side-filter", placeholder: "Filter chats",
+    "aria-label": "Filter chats", oninput: () => el._graph && renderSide(el, el._graph, ui) }));
+  el._graph = graph;
+  const q = filt.value.trim().toLowerCase();
+  const all = graph.nodes.filter((n) => n.type === "session");
+  const sessions = q ? all.filter((n) => `${n.label} ${n.seat} ${n.parent || ""} ${labelOf(graph, n.parent)}`.toLowerCase().includes(q)) : all;
   const labels = Object.fromEntries(graph.nodes.filter((n) => n.type === "work_item").map((n) => [n.id, n.label]));
   const groups = new Map();
   for (const s of sessions) {
@@ -358,13 +364,16 @@ export function renderSide(el, graph, ui) {
     return h("section", { class: "group" },
       h("h3", {}, title, h("span", { class: "n" }, `${list.length}`)),
       h("ul", { class: "sess" }, shown.sort(byState).map((s) => h("li", { title: s.final || "" },
-        h("span", { class: "st " + (s.limited ? "limited" : s.state), "aria-hidden": "true" }),
+        h("span", { class: "st " + (s.limited ? "limited" : s.state), "aria-hidden": "true", title: s.limited ? "at a usage limit" : s.needs_you ? "needs you" : s.state }),
         h("a", { class: "nm", href: "#/chat/" + encodeURIComponent(s.session_id || s.id.replace(/^session:[^:]+:/, "")) }, s.label, h("span", { class: "sr" }, ", ", s.limited ? "at a limit" : s.state)),
         h("span", { class: "rt" }, mode === "seat" ? (s.parent || "").replace("work_item:", "") : s.seat)))),
       folded > 0 && h("button", { class: "idle-fold", onclick: () => ui.expand(key) }, `${folded} idle`));
   });
-  el.replaceChildren(head, ...blocks);
+  if (q && !blocks.length) blocks.push(h("p", { class: "hint" }, `No chat matches "${filt.value.trim()}".`));
+  if (filt.parentNode !== el) el.replaceChildren(head, filt, ...blocks);
+  else { for (const n of [...el.childNodes]) if (n !== filt) n.remove(); el.insertBefore(head, filt); el.append(...blocks); }
 }
+function labelOf(graph, id) { const n = id && graph.nodes.find((x) => x.id === id); return n ? n.label : ""; }
 
 const RANK = { needs_you: 0, working: 1, idle: 2, stopped: 3 };
 function byState(a, b) { return (RANK[a.state] ?? 4) - (RANK[b.state] ?? 4) || (b.activity || 0) - (a.activity || 0); }

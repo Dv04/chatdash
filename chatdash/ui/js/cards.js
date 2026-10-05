@@ -99,7 +99,8 @@ export function cardBody(x, ui, onChange) {
       send = h("button", { class: "btn primary", disabled: answered < n,
         onclick: () => ui.send(x, bodyFor(x, d), label(x, d)) }, n > 1 ? `Send all ${n} answers` : "Send");
       prog = n > 1 ? h("span", { class: "progress", "aria-live": "polite" }, `${answered} of ${n} answered`) : null;
-      note = n > 1 ? h("span", { class: "hint", hidden: answered >= n }, "Nothing is sent until every part has an answer.") : null;
+      note = h("span", { class: "hint", hidden: answered >= n },
+        n > 1 ? "Nothing is sent until every part has an answer." : "Pick an option or type an answer, then Send.");
       wrap.append(h("div", { class: "sendrow" }, send, prog, note));
     }
   } else if (x.kind === "limit" && !ro) {

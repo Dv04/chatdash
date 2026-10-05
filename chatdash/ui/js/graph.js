@@ -109,7 +109,7 @@ export class Graph {
       onclick: () => { set.has(v) ? set.delete(v) : set.add(v); this.relayout(); } }, label);
     const q = h("input", { type: "search", class: "free g-q", placeholder: "Filter (/)", value: this.filters.q, "aria-label": "Filter nodes",
       oninput: (e) => { this.filters.q = e.target.value.toLowerCase(); this.relayout(); } });
-    const sq = h("input", { type: "search", class: "free g-sq", placeholder: "Search files, PRs, chats (Enter)", value: this.sq || "",
+    const sq = h("input", { type: "search", class: "free g-sq", placeholder: "Search files, PRs, chats", title: "Search files, PRs and chats (Enter)", value: this.sq || "",
       "aria-label": "Search everything", onkeydown: (e) => { if (e.key === "Enter") { this.sq = e.target.value; this.searchAll(this.sq); } } });
     const layer = (k, l) => h("button", { class: "chip toggle", "aria-pressed": String(this.layers.has(k)), onclick: () => this.toggleLayer(k) }, l);
     // g-row wrappers are display: contents on desktop (same flow as before); on a phone each is one swipeable line
@@ -122,7 +122,7 @@ export class Graph {
       row("g-row-filters", h("div", { class: "g-filters", role: "group", "aria-label": "Seats" }, seats.map((s) => chip(this.filters.seats, s, s))),
         h("div", { class: "g-filters", role: "group", "aria-label": "States" }, STATES.map((s) => chip(this.filters.states, s, s.replace("_", " "))))),
       row("g-row-tools", q,
-        h("button", { class: "btn ghost", onclick: () => this.fit(), title: "Fit (0)" }, "Fit"),
+        h("button", { class: "btn ghost", onclick: () => { this.userMoved = false; this.fit(); }, title: "Fit (0)" }, "Fit"),
         h("button", { class: "btn ghost", "aria-pressed": String(!this.table.hidden), onclick: () => this.toggleTable() }, "Table"),
         h("button", { class: "btn ghost", "aria-pressed": String(!!this.frames24), onclick: () => this.toggleReplay() }, "Replay")),
       this.frames24 && this.replayBar(),
@@ -407,7 +407,9 @@ export class Graph {
     if (this.last) { this.frames.push(t - this.last); if (this.frames.length > 120) this.frames.shift(); }
     this.last = t;
     if (this.alpha > 0) this.step();
-    if (this.autoFit && this.m && this.m.nodes.length && this.alpha < 0.08) { this.autoFit = false; this.fit(); }
+    // Keep the whole graph in view while the layout settles (it used to fit once mid-settle, then drift past the
+    // frame and under the minimap); stops for good once it is still or the person pans, zooms or drags.
+    if (this.autoFit && this.m && this.m.nodes.length && this.alpha < 0.3) { this.fit(); if (this.alpha <= 0) this.autoFit = false; }
     this.draw();
     if (this.alpha > 0 || this.drag || this.pulse()) this.kick(); else this.last = 0;
   }
@@ -420,6 +422,7 @@ export class Graph {
     this.canvas.width = r.width * dpr; this.canvas.height = r.height * dpr;
     this.canvas.style.width = r.width + "px"; this.canvas.style.height = r.height + "px";
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!this.userMoved && this.m && this.m.nodes.length) this.fit();   // e.g. the table opened under the map
     this.kick();
   }
 
@@ -449,7 +452,7 @@ export class Graph {
       c.stroke();
     }
     c.setLineDash([]); c.globalAlpha = 1;
-    const labelAll = t.k > 0.95;
+    const show = this.labelSet(c, t, P);
     for (const n of this.m.nodes) {
       const p = P.get(n.id), r = n.r;
       c.globalAlpha = n.ghost ? 0.18 : n.dim ? 0.13 : 1;
@@ -461,9 +464,10 @@ export class Graph {
       else if (n.type === "pr") { for (let i = 0; i < 6; i++) { const an = Math.PI / 3 * i + Math.PI / 6; c[i ? "lineTo" : "moveTo"](p.x + r * Math.cos(an), p.y + r * Math.sin(an)); } c.closePath(); }
       else if (n.type === "repo") roundRect(c, p.x - r, p.y - r, r * 2, r * 2, 4);
       else if (n.type === "seat") {
-        c.font = `600 ${12 / Math.max(t.k, 0.6)}px -apple-system, system-ui, sans-serif`;
-        const w = Math.max(r * 3.2, c.measureText(n.label).width + 16 / Math.max(t.k, 0.6));
-        roundRect(c, p.x - w / 2, p.y - r * 0.8, w, r * 1.6, 6);
+        c.font = `600 ${12 / t.k}px -apple-system, system-ui, sans-serif`;
+        const w = Math.max(r * 3.2, c.measureText(n.label).width + 16 / t.k);
+        const bh = Math.max(r * 1.6, 20 / t.k);
+        roundRect(c, p.x - w / 2, p.y - bh / 2, w, bh, 6 / t.k);
       }
       else if (n.type === "work_item") { c.moveTo(p.x, p.y - r); c.lineTo(p.x + r, p.y); c.lineTo(p.x, p.y + r); c.lineTo(p.x - r, p.y); c.closePath(); }
       else if (n.type === "job") c.rect(p.x - r, p.y - r, r * 2, r * 2);
@@ -479,14 +483,14 @@ export class Graph {
         c.strokeStyle = n.change === "born" ? C.ok : n.change === "gone" ? C.idle : C.focus; c.setLineDash(n.change === "gone" ? [3 / t.k, 3 / t.k] : []); c.stroke(); c.setLineDash([]); }
       if (n.flashing) { c.beginPath(); c.arc(p.x, p.y, r + 11 / t.k + 2, 0, Math.PI * 2); c.lineWidth = 3 / t.k; c.strokeStyle = C.working; c.globalAlpha = Math.min(c.globalAlpha, 0.7); c.stroke(); c.globalAlpha = n.dim ? 0.13 : 1; }
       if (this.focus === n.id || this.hover === n.id) { c.beginPath(); c.arc(p.x, p.y, r + 8 / t.k + 2, 0, Math.PI * 2); c.lineWidth = 2 / t.k; c.strokeStyle = C.focus; c.stroke(); }
-      if (n.type !== "session" || labelAll || this.hover === n.id || this.focus === n.id || n.needs_you || (this.hl && !n.dim)) {
+      if (show.has(n.id)) {
         const bold = n.type === "seat" || n.type === "work_item" || n.type === "repo";
         c.fillStyle = bold ? C.ink : C.ink2;
-        c.font = `${bold ? 600 : 400} ${(n.type === "file" || n.type === "pr" ? 11 : 12) / Math.max(t.k, 0.6)}px -apple-system, system-ui, sans-serif`;
+        c.font = `${bold ? 600 : 400} ${(n.type === "file" || n.type === "pr" ? 11 : 12) / t.k}px -apple-system, system-ui, sans-serif`;
         c.textAlign = n.type === "seat" ? "center" : "left"; c.textBaseline = "middle";
-        const label = trunc(n.type === "work_item" ? n.label.split(" - ")[0] : n.label, n.type === "session" ? 34 : 40);
-        if (n.type === "seat") c.fillText(label, p.x, p.y);
-        else c.fillText(label + (n.type === "folder" && n.files ? ` (${n.files})` : n.type === "repo" ? ` (${n.members})` : ""), p.x + (n.type === "folder" ? r * 1.3 : r) + 5, p.y);
+        const dy = show.get(n.id) / t.k;
+        if (n.type === "seat") c.fillText(labelText(n), p.x, p.y);
+        else c.fillText(labelText(n), p.x + (n.type === "folder" ? r * 1.3 : r) + 5 / t.k, p.y + dy);
       }
     }
     c.globalAlpha = 1;
@@ -514,14 +518,46 @@ export class Graph {
     m.strokeRect((-t.x / t.k - b.x0) * k, (-t.y / t.k - b.y0) * k, (this.W / t.k) * k, (this.H / t.k) * k);
   }
 
+  // Which labels to draw. Seats, needs-you, the hovered and the focused node always; every other label wherever it
+  // does not collide with one already placed (screen space, 12 px type at any zoom). Before, labels shrank with the
+  // zoom and chat labels were all hidden below zoom 0.95, so a fitted graph read as unlabelled dots.
+  labelSet(c, t, P) {
+    const must = (n) => n.type === "seat" || n.needs_you || this.hover === n.id || this.focus === n.id || (this.hl && !n.dim);
+    const rank = (n) => (n.type === "seat" ? 0 : must(n) ? 1 : n.type === "session" ? 3 : 2);
+    const placed = [], show = new Map();               // node id -> vertical nudge in screen px
+    LBL_MAX = this.W < 520 ? 22 : 34;                  // a phone canvas: shorter chat labels
+    c.font = "500 12px -apple-system, system-ui, sans-serif";
+    for (const n of [...this.m.nodes].sort((a, b) => rank(a) - rank(b))) {
+      if (n.ghost || (n.dim && !must(n))) continue;
+      const p = P.get(n.id);
+      if (!p) continue;
+      const tw = c.measureText(labelText(n)).width, sx = p.x * t.k + t.x, sy = p.y * t.k + t.y, rr = n.r * t.k;
+      const x0 = n.type === "seat" ? sx - tw / 2 - 8 : sx + rr + 4, box = [x0, sy - 9, x0 + tw + (n.type === "seat" ? 16 : 4), sy + 9];
+      if (!must(n) && box[2] > this.W - 4) continue;    // would run off the canvas edge
+      const hits = (dy) => placed.some((q) => box[0] < q[2] && box[2] > q[0] && box[1] + dy < q[3] && box[3] + dy > q[1]);
+      if (!must(n)) { if (!hits(0)) { show.set(n.id, 0); placed.push(box); } continue; }
+      // an always-shown label that collides moves up or down to the nearest free line (seats never move)
+      const inside = (d) => box[1] + d >= 2 && box[3] + d <= this.H - 2;
+      const dy = n.type === "seat" ? 0 : [0, -15, 15, -30, 30, -45, 45].find((d) => inside(d) && !hits(d)) ?? 0;
+      show.set(n.id, dy); placed.push([box[0], box[1] + dy, box[2], box[3] + dy]);
+    }
+    return show;
+  }
+
   fit() {
     if (!this.m) return;
     const P = this.pos, ns = this.m.nodes;
     if (!ns.length || !this.W) return;
     const xs = ns.map((n) => P.get(n.id).tx ?? P.get(n.id).x), ys = ns.map((n) => P.get(n.id).ty ?? P.get(n.id).y);
-    const x0 = Math.min(...xs) - 60, x1 = Math.max(...xs) + 220, y0 = Math.min(...ys) - 50, y1 = Math.max(...ys) + 50;
-    const k = Math.max(0.15, Math.min(1.6, Math.min(this.W / (x1 - x0), this.H / (y1 - y0))));
-    this.t = { k, x: (this.W - (x1 + x0) * k) / 2, y: (this.H - (y1 + y0) * k) / 2 };
+    const x0 = Math.min(...xs) - 30, x1 = Math.max(...xs) + 30, y0 = Math.min(...ys) - 30, y1 = Math.max(...ys) + 30;
+    // Margins in screen pixels (labels are 12 px at any zoom): room for labels on the right, the minimap at the
+    // bottom right, and on a phone the bottom navigation bar that floats over the canvas.
+    const phone = matchMedia("(max-width: 760px)").matches;
+    const padL = 16, padR = Math.min(200, this.W * 0.42), padT = 22;
+    const padB = phone ? 100 : this.mini && !this.mini.hidden && this.H > 360 ? 140 : 22;
+    const aw = Math.max(40, this.W - padL - padR), ah = Math.max(40, this.H - padT - padB);
+    const k = Math.max(0.15, Math.min(1.6, Math.min(aw / (x1 - x0), ah / (y1 - y0))));
+    this.t = { k, x: padL + (aw - (x1 - x0) * k) / 2 - x0 * k, y: padT + (ah - (y1 - y0) * k) / 2 - y0 * k };
     this.kick();
   }
 
@@ -552,7 +588,7 @@ export class Graph {
       const w = this.world(ev);
       if (this.drag) {
         const dx = ev.clientX - this.drag.sx, dy = ev.clientY - this.drag.sy;
-        if (Math.abs(dx) + Math.abs(dy) > 4) { this.drag.moved = true; clearTimeout(press); }
+        if (Math.abs(dx) + Math.abs(dy) > 4) { this.drag.moved = true; this.userMoved = true; clearTimeout(press); }
         if (this.drag.node) { const p = this.pos.get(this.drag.node.id); p.x = w.x; p.y = w.y; p.tx = p.ty = null; }
         else { this.t.x = this.drag.tx + dx; this.t.y = this.drag.ty + dy; }
         this.kick();
@@ -578,7 +614,7 @@ export class Graph {
     cv.addEventListener("pointerleave", () => { this.tip.hidden = true; if (this.hover) { this.hover = null; this.kick(); } });
     cv.addEventListener("wheel", (ev) => {
       ev.preventDefault();
-      this.autoFit = false;
+      this.autoFit = false; this.userMoved = true;
       const r = cv.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
       const k = Math.max(0.25, Math.min(3, this.t.k * Math.exp(-ev.deltaY * 0.0015)));
       this.t.x = mx - ((mx - this.t.x) * k) / this.t.k; this.t.y = my - ((my - this.t.y) * k) / this.t.k; this.t.k = k;
@@ -615,7 +651,7 @@ export class Graph {
     else if (k === "Escape") { this.closePanel(); this.hideMenu(); }
     else if (k === "+" || k === "=") { this.t.k = Math.min(3, this.t.k * 1.2); this.kick(); }
     else if (k === "-") { this.t.k = Math.max(0.25, this.t.k / 1.2); this.kick(); }
-    else if (k === "0") this.fit();
+    else if (k === "0") { this.userMoved = false; this.fit(); }
     else if (k === "l") { this.layout = this.layout === "force" ? "lanes" : "force"; this.renderBar(); this.relayout(); }
     else if (k === "v") { this.view = this.view === "tree" ? "work" : "tree"; this.renderBar(); this.relayout(); }
     else if (k === "T") this.toggleTable();
@@ -769,6 +805,11 @@ function radius(n, max) {
   return 5 + 11 * Math.sqrt((n.spend || 0) / max);
 }
 function rank(n) { return n.needs_you ? 0 : n.state === "working" ? 1 : n.type === "cluster" ? 3 : n.state === "idle" ? 2 : 4; }
+let LBL_MAX = 34;
+function labelText(n) {
+  const base = trunc(n.type === "work_item" ? n.label.split(" - ")[0] : n.label, n.type === "session" ? LBL_MAX : 40);
+  return base + (n.type === "folder" && n.files ? ` (${n.files})` : n.type === "repo" ? ` (${n.members})` : "");
+}
 function trunc(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "..." : s; }
 function roundRect(c, x, y, w, hh, r) { c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + hh, r); c.arcTo(x + w, y + hh, x, y + hh, r); c.arcTo(x, y + hh, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
 export { toast };

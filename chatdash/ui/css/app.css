@@ -682,7 +682,8 @@ dialog.palette::backdrop { background: oklch(0% 0 0 / .35); }
 .side-filter { width: 100%; box-sizing: border-box; margin: 0 0 var(--s2); }
 
 /* chat: background task notices as one-line events (chat.js taskEvent) */
-.e.task-ev summary { display: flex; gap: var(--s2); align-items: baseline; cursor: pointer; }
+.e.task-ev summary { display: flex; gap: var(--s2); align-items: baseline; cursor: pointer; white-space: nowrap; }
+.e.task-ev .ev-sum { flex: 1 1 auto; }
 .e.task-ev .ev-sum { color: var(--ink-2); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .e.task-ev.err summary { color: var(--bad); }
 .e.task-ev pre { white-space: pre-wrap; overflow-wrap: anywhere; font: var(--t-xs)/1.45 var(--mono); margin: var(--s2) 0 0; }

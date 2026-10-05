@@ -54,6 +54,13 @@ Radius 6 px for controls and strips, 10 to 14 px for floating panels and the pho
   fixed 6 s wait is gone). An answer shows on the board about 2.5 s after the chat writes it.
 - A refresh never moves a focused field: unchanged strips stay in place, typing updates only the Send state, and a
   poll with no data change repaints only the rail, ages and badge.
+- The WebGL2 nebula (board field and Sky) draws in a Web Worker on an OffscreenCanvas (js/gl-worker.js) at full
+  frame rate with the frosted glass kept; the main thread only posts the scene and moves visible labels when they
+  shift a pixel. Measured in Chrome per 10 s: board 741 -> 289 ms main-thread time, Sky 627 -> 327 ms, same image
+  (worker and main-thread screenshots identical). No OffscreenCanvas WebGL2: it falls back to the main thread.
+- Claude's messages render as markdown (js/md.js: DOM nodes only, no innerHTML; links only http(s)).
+- Pull into Sky: at the board's top, scrolling up (or pulling down on a phone) brings the nebula closer and past
+  260 px dives into Sky; transforms only.
 
 ## Motion
 150 to 250 ms state transitions only; the graph layout is the one moving element and stops when settled; no ring pulse;

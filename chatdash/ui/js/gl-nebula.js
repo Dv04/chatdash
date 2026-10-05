@@ -414,3 +414,50 @@ export class GLNebula {
     return true;
   }
 }
+
+// Same API as GLNebula, drawn by gl-worker.js on an OffscreenCanvas: the page's main thread only posts the scene
+// (measured 2026-10-05: the field cost 740 ms of main-thread time per 10 s drawing on the main thread). If the
+// worker cannot draw (no OffscreenCanvas WebGL2, worker error) it swaps in a fresh canvas drawn on the main thread,
+// and onswap(canvas) tells the owner so its canvas reference stays right.
+export class GLWorkerNebula {
+  constructor(canvas) {
+    if (!glSupported() || typeof Worker === "undefined" || !("transferControlToOffscreen" in canvas)) throw new Error("no offscreen webgl2");
+    this.canvas = canvas; this.lost = false; this.gasScale = 0.75; this.direct = null; this.size = null; this.onswap = null;
+    const off = canvas.transferControlToOffscreen();
+    this.w = new Worker(new URL("./gl-worker.js", import.meta.url), { type: "module" });
+    this.w.onmessage = (e) => { if (e.data && e.data.k === "error") this.fail(e.data.msg); };
+    this.w.onerror = (e) => { if (e.preventDefault) e.preventDefault(); this.fail(e.message || "worker error"); };
+    this.w.postMessage({ k: "init", canvas: off }, [off]);
+  }
+  fail(msg) {
+    if (this.direct || this.lost) return;
+    this.error = msg;
+    try { this.w.terminate(); } catch { /* gone */ }
+    const c = document.createElement("canvas");
+    for (const a of this.canvas.attributes) c.setAttribute(a.name, a.value);
+    c.hidden = this.canvas.hidden;
+    this.canvas.replaceWith(c); this.canvas = c;
+    try {
+      this.direct = new GLNebula(c); this.direct.gasScale = this.gasScale;
+      if (this.size) this.direct.resize(...this.size);
+    } catch { this.lost = true; }
+    if (this.onswap) this.onswap(c);
+  }
+  resize(cssW, cssH, dpr) {
+    this.size = [cssW, cssH, dpr]; this.css = [cssW, cssH];
+    if (this.direct) { this.direct.gasScale = this.gasScale; return this.direct.resize(cssW, cssH, dpr); }
+    this.w.postMessage({ k: "resize", w: cssW, h: cssH, dpr, gasScale: this.gasScale });
+  }
+  render(scene, t) {
+    if (this.direct) return this.direct.render(scene, t);
+    if (this.lost) return false;
+    this.w.postMessage({ k: "render", scene, t });
+    return true;
+  }
+}
+
+// The renderer for a canvas: the worker one where the browser can, else the main-thread one (?glmain forces it).
+export function makeNebula(canvas) {
+  if (!new URLSearchParams(location.search).has("glmain")) { try { return new GLWorkerNebula(canvas); } catch { /* fall through */ } }
+  return new GLNebula(canvas);
+}

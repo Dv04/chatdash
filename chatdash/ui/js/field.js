@@ -9,11 +9,9 @@
 // Motion runs only while wanted (see Field.want); otherwise 0 frames, and a data change paints ONE still frame.
 // Stage 2 views reuse the engine with their own camera (Field.camera: the world rect shown in the band).
 
-import { GLNebula } from "./gl-nebula.js";
+import { makeNebula } from "./gl-nebula.js";
 import { splitNeeds } from "./board.js";
 
-const PHONE_MQ = matchMedia("(max-width: 760px)");
-export const FRAME_MS = () => (PHONE_MQ.matches ? 1000 / 15 : 1000 / 24);
 
 export const OUT_PCT = 95;
 
@@ -102,10 +100,11 @@ export class Field {
       try {
         const c = document.createElement("canvas");
         c.className = "nb-gl"; c.setAttribute("role", "img");
-        this.gl = new GLNebula(c);
-        this.glCanvas = host.insertBefore(c, this.canvas);
+        this.glCanvas = host.insertBefore(c, this.canvas);     // in the page before the transfer to the worker
+        this.gl = makeNebula(c);
+        this.gl.onswap = (nc) => { this.glCanvas = nc; this.layout(); };
         this.canvas.removeAttribute("role"); this.canvas.style.display = "none";
-      } catch { this.gl = null; }
+      } catch { this.gl = null; if (this.glCanvas) { this.glCanvas.remove(); this.glCanvas = null; } }
     }
     this.mode = this.gl ? "gl" : "2d";
     this.hover = null;
@@ -132,7 +131,7 @@ export class Field {
   want() { return this.active && this.visible && this.focused && this.inView && !this.reduced.matches; }
   sync() {
     if (this.want()) { if (!this.raf) { this.last = 0; this.raf = requestAnimationFrame(this.loop); } }
-    else if (this.raf) { cancelAnimationFrame(this.raf); clearTimeout(this.nap); this.raf = 0; }
+    else if (this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; }
   }
   setActive(on) {
     this.active = on;
@@ -283,12 +282,6 @@ export class Field {
   loop(t) {
     this.raf = 0;
     if (!this.want()) return;
-    // Frame cap (speed first). The gas drifts slowly, so 24 fps on a desk and 15 on a phone look the
-    // same as 60 while costing a third to a quarter of the main thread and GPU (measured 740 ms busy per 10 s at 60).
-    if (this.last && t - this.last < FRAME_MS() - 2) {             // sleep until the next capped frame instead of
-      const wait = FRAME_MS() - (t - this.last);                     // waking the compositor 60 times a second
-      this.raf = -1; this.nap = setTimeout(() => { this.raf = requestAnimationFrame(this.loop); }, wait); return;
-    }
     this.frames++;
     if (this.last) {
       const dt = t - this.last;

@@ -5,8 +5,8 @@
 // one still frame on a data change.
 import { h, ct, age, toast } from "./lib.js";
 import { post } from "./api.js";
-import { GLNebula } from "./gl-nebula.js";
-import { fieldModel, FRAME_MS } from "./field.js";
+import { makeNebula } from "./gl-nebula.js";
+import { fieldModel } from "./field.js";
 import { cardBody, timeoutLine } from "./cards.js";
 import { pace } from "./capacity.js";
 import { splitNeeds } from "./board.js";
@@ -40,7 +40,7 @@ export class Sky {
   constructor(el, ui) {
     this.el = el; this.ui = ui;
     this.canvas = el.appendChild(h("canvas", { class: "sky-gl", role: "img", "aria-label": "Sky" }));
-    try { this.gl = new GLNebula(this.canvas); } catch (e) { this.gl = null; this.glError = e.message; }
+    try { this.gl = makeNebula(this.canvas); this.gl.onswap = (nc) => { this.canvas = nc; this.layout(); }; } catch (e) { this.gl = null; this.glError = e.message; }
     this.layer = el.appendChild(h("div", { class: "sky-labels" }));
     this.hud = el.appendChild(h("div", { class: "sky-hud", role: "status", "aria-live": "polite" }));
     this.panel = el.appendChild(h("aside", { class: "sky-panel", hidden: true, "aria-label": "Seat" }));
@@ -72,7 +72,7 @@ export class Sky {
   want() { return this.active && this.visible && this.focused && !this.reduced.matches && !!this.gl; }
   sync() {
     if (this.want()) { if (!this.raf) { this.last = 0; this.raf = requestAnimationFrame(this.loop); } }
-    else if (this.raf) { cancelAnimationFrame(this.raf); clearTimeout(this.nap); this.raf = 0; }
+    else if (this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; }
   }
   setActive(on) {
     this.active = on;
@@ -82,10 +82,6 @@ export class Sky {
   loop(now) {
     this.raf = 0;
     if (!this.want()) return;
-    if (this.last && now - this.last < FRAME_MS() - 2) {             // sleep until the next capped frame instead of
-      const wait = FRAME_MS() - (now - this.last);                     // waking the compositor 60 times a second
-      this.raf = -1; this.nap = setTimeout(() => { this.raf = requestAnimationFrame(this.loop); }, wait); return;
-    }   // same cap as the board field
     this.frames++;
     const dt = this.last ? Math.min(100, now - this.last) : 16;
     this.last = now; this.t += dt;

@@ -634,3 +634,24 @@ dialog.palette::backdrop { background: oklch(0% 0 0 / .35); }
 
 /* graph toolbar rows: no box on desktop (the bar flows exactly as before); the nebula phone layout makes each a swipeable line */
 .g-row { display: contents; }
+
+/* rendered markdown (js/md.js): Claude's messages in the chat page, strips and graph panels */
+.md { white-space: normal; overflow-wrap: anywhere; line-height: 1.55; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md pre, .md blockquote, .md .md-table, .md h4, .md h5, .md hr { margin: 0 0 var(--s3); }
+.md h4 { font-size: var(--t-md); font-weight: 650; }
+.md h5 { font-size: var(--t-sm); font-weight: 650; }
+.md ul, .md ol { padding-left: 1.4em; }
+.md li + li { margin-top: 2px; }
+.md li > ul, .md li > ol { margin: 2px 0 0; }
+.md code { font-family: var(--mono); font-size: 0.88em; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.md pre.code { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: var(--s2) var(--s3); overflow-x: auto; white-space: pre; }
+.md pre.code code { background: none; border: 0; padding: 0; font-size: var(--t-xs); }
+.md blockquote { border-left: 3px solid var(--line-strong); padding-left: var(--s3); color: var(--ink-2); }
+.md hr { border: 0; border-top: 1px solid var(--line); }
+.md a { color: var(--action); }
+.md .md-table { overflow-x: auto; }
+.md table { border-collapse: collapse; font-size: var(--t-sm); }
+.md th, .md td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
+.md th { background: var(--panel-2); font-weight: 600; }

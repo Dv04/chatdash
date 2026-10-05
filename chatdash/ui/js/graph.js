@@ -5,6 +5,7 @@
 import { h, ct, age, toast } from "./lib.js";
 import { get } from "./api.js";
 import { renderMode, MODES, filesBrowser } from "./gx.js";
+import { md } from "./md.js";
 
 const KIND_EDGES = { tree: new Set(["runs_on", "spawned_by"]), work: new Set(["belongs_to", "collides_with", "waits_on", "spawned_by"]),
   repo: new Set(["in_repo", "spawned_by", "collides_with"]) };
@@ -664,7 +665,7 @@ export class Graph {
         h("span", { class: "chip st-" + (n.needs_you ? "blocked" : n.state) }, n.needs_you ? "needs you" : n.state),
         n.excluded && h("span", { class: "chip ro" }, "read-only")),
       n.activity && h("p", { class: "hint" }, `last activity ${ct(n.activity, true)} (${age(Date.now() / 1000 - n.activity)} ago)`),
-      n.final && h("p", { class: "final" }, n.final),
+      n.final && md(n.final, "final md"),
       rc && h("div", { class: "receipt" }, h("span", { class: "chip " + (rc.verified ? "risk-low" : "risk-med") }, rc.verified ? "verified" : "not verified"),
         h("span", { class: "chip" }, `${rc.files} files`), rc.test && h("span", { class: "testline" }, rc.test),
         (rc.prs || []).map((u) => h("a", { href: u, target: "_blank", rel: "noopener noreferrer" }, u.replace(/^https:\/\/github.com\//, "")))),

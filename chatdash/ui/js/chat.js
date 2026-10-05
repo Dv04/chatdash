@@ -2,6 +2,7 @@
 // controls for that chat (reply, keep warm, stop, terminal). Live chats refresh in place every 5 s;
 // a refresh never steals the scroll position or the reply being typed.
 import { h, ct, age, toast } from "./lib.js";
+import { md } from "./md.js";
 import { get, post } from "./api.js";
 
 const PAGE = 250;
@@ -174,16 +175,16 @@ function when(ts) { const t = Date.parse(ts); return isNaN(t) ? "" : ct(t / 1000
 function entry(e) {
   const t = h("span", { class: "at" }, when(e.ts));
   if (e.kind === "user") return h("li", { class: "e user" + (e.command ? " cmd" : "") }, h("div", { class: "lbl" }, "You", t), h("div", { class: "txt" }, e.text));
-  if (e.kind === "text") return h("li", { class: "e text" }, h("div", { class: "lbl" }, "Claude", t), h("div", { class: "txt" }, e.text));
+  if (e.kind === "text") return h("li", { class: "e text" }, h("div", { class: "lbl" }, "Claude", t), md(e.text, "txt md"));
   if (e.kind === "thinking") return h("li", { class: "e thinking" },
     h("details", {}, h("summary", { class: "lbl" }, "Thinking", t, h("span", { class: "peek" }, e.redacted ? "redacted by the API" : e.text.slice(0, 140))),
-      h("div", { class: "txt" }, e.redacted ? "(The API returned this thinking block encrypted; there is no text to show.)" : e.text)));
+      h("div", { class: "txt" }, e.redacted ? "(The API returned this thinking block encrypted; there is no text to show.)" : md(e.text, "md"))));
   if (e.kind === "tool") return h("li", { class: "e tool" + (e.error ? " err" : "") },
     h("details", {}, h("summary", { class: "lbl" }, h("b", {}, e.name), h("span", { class: "peek mono" }, e.summary || ""), e.error && h("span", { class: "chip risk-high" }, "error"),
       e.result == null && h("span", { class: "chip" }, "no result yet"), t),
       h("div", { class: "io" }, h("div", { class: "hint" }, "Input"), h("pre", {}, e.input),
         e.result != null && [h("div", { class: "hint" }, "Result"), h("pre", {}, e.result || "(empty)")])));
-  if (e.kind === "summary") return h("li", { class: "e notice" }, h("details", {}, h("summary", { class: "lbl" }, "Compaction summary", t), h("div", { class: "txt" }, e.text)));
+  if (e.kind === "summary") return h("li", { class: "e notice" }, h("details", {}, h("summary", { class: "lbl" }, "Compaction summary", t), md(e.text, "txt md")));
   return h("li", { class: "e notice" }, h("div", { class: "lbl" }, "Notice", t), h("div", { class: "txt" }, e.text));
 }
 

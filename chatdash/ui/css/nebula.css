@@ -22,8 +22,8 @@
   --nb-lead: oklch(30% 0.03 265 / 0.45);
   --nb-out-ink: oklch(48% 0.2 355);
   --nb-unk-ink: oklch(47% 0.12 65);
-  --glass: oklch(99% 0.004 265 / 0.93);   /* no backdrop blur (speed, 2026-10-05): near-opaque instead */
-  --glass-rail: oklch(99% 0.004 265 / 0.95);
+  --glass: oklch(99% 0.004 265 / 0.74);
+  --glass-rail: oklch(99% 0.004 265 / 0.78);
   --glass-panel: oklch(100% 0 0 / 0.6);
   --glass-panel-2: oklch(93% 0.012 265 / 0.7);
   --glass-input: oklch(100% 0 0 / 0.85);
@@ -75,8 +75,8 @@
   --nb-lead: oklch(100% 0 0 / 0.4);
   --nb-out-ink: oklch(78% 0.15 355);
   --nb-unk-ink: oklch(83% 0.12 78);
-    --glass: oklch(19% 0.03 272 / 0.93);
-    --glass-rail: oklch(15% 0.03 272 / 0.95);
+    --glass: oklch(19% 0.03 272 / 0.74);
+    --glass-rail: oklch(15% 0.03 272 / 0.8);
     --glass-panel: oklch(100% 0 0 / 0.05);
     --glass-panel-2: oklch(100% 0 0 / 0.08);
     --glass-input: oklch(10% 0.02 272 / 0.6);
@@ -113,8 +113,8 @@
   --nb-lead: oklch(100% 0 0 / 0.4);
   --nb-out-ink: oklch(78% 0.15 355);
   --nb-unk-ink: oklch(83% 0.12 78);
-  --glass: oklch(19% 0.03 272 / 0.93);
-  --glass-rail: oklch(15% 0.03 272 / 0.95);
+  --glass: oklch(19% 0.03 272 / 0.74);
+  --glass-rail: oklch(15% 0.03 272 / 0.8);
   --glass-panel: oklch(100% 0 0 / 0.05);
   --glass-panel-2: oklch(100% 0 0 / 0.08);
   --glass-input: oklch(10% 0.02 272 / 0.6);
@@ -186,7 +186,8 @@
 :root[data-look="nebula"][data-view="board"] .nb-field > .nb-gl { clip-path: var(--nb-win-clip-gl); }
 
 /* rail: a glass bar; the capsule replaces its nav, the field band replaces its seat chips */
-:root[data-look="nebula"] .rail { background: var(--glass-rail); border-bottom-color: var(--glass-line); padding-left: 96px; }
+:root[data-look="nebula"] .rail { background: var(--glass-rail); border-bottom-color: var(--glass-line);
+  backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); padding-left: 96px; }
 :root[data-look="nebula"] .rail .nav,
 :root[data-look="nebula"] .rail .seats { display: none; }
 
@@ -197,7 +198,7 @@
 :root[data-look="nebula"][data-view="board"] #side-wrap { display: contents; }
 :root[data-look="nebula"][data-view="board"] :is(#side, .col, #cap) {
   position: relative; z-index: 1; grid-row: 1; min-width: 0; border-radius: 26px; padding: 18px;
-  background: var(--glass);
+  background: var(--glass); backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4);
   box-shadow: inset 0 1px 0 var(--glass-rim), 0 28px 56px var(--glass-shadow);
   max-height: max(340px, calc(100vh - var(--nb-top, 300px) - 28px)); overflow: auto; overscroll-behavior: contain;
   transition: transform .25s var(--ease), box-shadow .25s var(--ease); }
@@ -210,11 +211,12 @@
 :root[data-look="nebula"] :is(.free, .reply) { background: var(--glass-input); }
 :root[data-look="nebula"] .strip { border-radius: 14px; }
 :root[data-look="nebula"] .since { border-radius: 12px; }
-:root[data-look="nebula"][data-view="board"] .col:has(.strip.sheet) { transform: none; overflow: visible; max-height: none; }
+:root[data-look="nebula"][data-view="board"] .col:has(.strip.sheet) { backdrop-filter: none; -webkit-backdrop-filter: none; transform: none; overflow: visible; max-height: none; }
 
 /* ornament: actions overlapping the centre window's bottom edge */
 :root[data-look="nebula"][data-view="board"] .nb-orn { display: flex; grid-column: 2; grid-row: 2; justify-self: center; margin-top: -46px;
-  position: relative; z-index: 3; gap: 4px; padding: 5px; border-radius: 999px; background: var(--glass-rail); box-shadow: inset 0 1px 0 var(--glass-rim), 0 10px 24px var(--glass-shadow); }
+  position: relative; z-index: 3; gap: 4px; padding: 5px; border-radius: 999px; background: var(--glass-rail);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); box-shadow: inset 0 1px 0 var(--glass-rim), 0 10px 24px var(--glass-shadow); }
 .nb-orn .btn { border-radius: 999px; padding: 6px 14px; color: var(--ink); }
 
 /* capsule navigation (not blurred: the cheapest place to save GPU, risk note) */
@@ -421,7 +423,7 @@
 .sky-back kbd { font: 600 0.65rem var(--mono); padding: 2px 6px; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--glass-line-strong); }
 
 .sky-panel { position: absolute; right: 24px; top: 24px; bottom: 24px; width: min(380px, 34vw); overflow: auto; padding: 22px 22px 24px; border-radius: 28px;
-  background: var(--glass);
+  background: var(--glass); backdrop-filter: blur(26px) saturate(1.5); -webkit-backdrop-filter: blur(26px) saturate(1.5);
   box-shadow: inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px var(--glass-line), 0 40px 70px -24px var(--glass-shadow);
   animation: sky-in .8s var(--spring, cubic-bezier(.16,1,.3,1)) both; }
 @keyframes sky-in { from { opacity: 0; translate: 24px 0; filter: blur(6px); } to { opacity: 1; translate: 0 0; filter: none; } }
@@ -451,7 +453,7 @@
 .sky-chats .rt { font-size: var(--t-xs); color: var(--ink-3); }
 
 .sky-ask { position: absolute; left: 50%; bottom: 28px; width: min(640px, calc(100vw - 48px)); max-height: min(70vh, 640px); overflow: auto; transform: translateX(-60%);
-  padding: 20px 22px; border-radius: 26px; display: grid; gap: 12px; background: var(--glass);
+  padding: 20px 22px; border-radius: 26px; display: grid; gap: 12px; background: var(--glass); backdrop-filter: blur(26px) saturate(1.5); -webkit-backdrop-filter: blur(26px) saturate(1.5);
   box-shadow: inset 0 1px 0 var(--glass-rim), inset 0 0 0 1px var(--glass-line), 0 40px 70px -24px var(--glass-shadow); animation: sky-up .7s var(--spring, cubic-bezier(.16,1,.3,1)) both; }
 @keyframes sky-up { from { opacity: 0; translate: 0 24px; filter: blur(6px); } to { opacity: 1; translate: 0 0; filter: none; } }
 .sky-ask header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
@@ -604,3 +606,15 @@
   :root[data-look="nebula"] .sessions .chat-tools { flex-wrap: wrap; }
   :root[data-look="nebula"] .sessions .chat-tools .field { flex: 1 1 100%; min-height: 40px; }
 }
+
+/* pull into the sky (js/nebula.js): at the board's top, scrolling up brings the nebula closer, then dives into Sky.
+   Transforms and opacity only, so the gesture runs on the compositor. */
+:root[data-look="nebula"][data-view="board"].nb-pulling .nb-field { transform-origin: 50% 190px; transform: scale(calc(1 + var(--nb-pull, 0) * 0.14)); }
+:root[data-look="nebula"][data-view="board"].nb-pulling .shell { transform: translateY(calc(var(--nb-pull, 0) * 56px)); opacity: calc(1 - var(--nb-pull, 0) * 0.4); }
+:root[data-look="nebula"][data-view="board"] .nb-band::after { content: "Keep scrolling up to fly into Sky"; position: absolute; left: 50%; bottom: -6px;
+  translate: -50% 100%; font-size: var(--t-xs); letter-spacing: .08em; color: var(--ink-2); opacity: 0; pointer-events: none; white-space: nowrap; }
+:root[data-look="nebula"][data-view="board"].nb-pulling .nb-band::after { opacity: min(1, calc(var(--nb-pull, 0) * 2.5)); }
+:root[data-look="nebula"][data-view="board"].nb-dive .nb-field { transform-origin: 50% 190px; transform: scale(2.4); opacity: 0;
+  transition: transform .42s cubic-bezier(.55, 0, .8, .2), opacity .42s ease-in; }
+:root[data-look="nebula"][data-view="board"].nb-dive :is(.shell, .nb-band, .nb-orn) { transform: translateY(90px); opacity: 0; transition: transform .35s ease-in, opacity .3s ease-in; }
+@media (pointer: coarse) { :root[data-look="nebula"][data-view="board"] .nb-band::after { content: "Pull down to fly into Sky"; } }

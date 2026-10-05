@@ -1,5 +1,6 @@
 // Mission board (B1): status rail, NEEDS YOU strips, work items and sessions.
 import { h, icon, age, ageParts, ct, store, toast } from "./lib.js";
+import { md } from "./md.js";
 import { post } from "./api.js";
 import { cardBody, timeoutLine, lowRiskRecommended } from "./cards.js";
 import { pace } from "./capacity.js";
@@ -291,7 +292,7 @@ function strip(x, ui, onChange) {
         h("summary", {}, "Last message", x.final_at ? `, ${ct(Date.parse(x.final_at) / 1000, true)}` : ""),
         x.session_id && h("a", { class: "btn ghost history", href: "#/chat/" + encodeURIComponent(x.session_id) }, "Full chat history"),
         x.last_prompt && h("p", { class: "final" }, "You: ", x.last_prompt),
-        h("p", { class: "final" }, x.final || "(no final message read)"),
+        x.final ? md(x.final, "final md") : h("p", { class: "final" }, "(no final message read)"),
         receiptView(x.receipt, x, ui))));
 }
 

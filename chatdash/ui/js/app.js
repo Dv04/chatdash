@@ -122,9 +122,9 @@ function route() {
   return x.startsWith("#/graph") ? "graph" : x.startsWith("#/work/") ? "work" : x.startsWith("#/chat/") ? "chat"
     : x.startsWith("#/settings") ? "settings" : x.startsWith("#/sessions") ? "sessions" : "board";
 }
+let prevRoute = null;
 function applyRoute() {
   const r = route();
-  nebula.apply();
   gsec.hidden = r !== "graph";
   wsec.hidden = r !== "work";
   csec.hidden = r !== "chat";
@@ -140,7 +140,11 @@ function applyRoute() {
   if (r === "chat") chat.open(decodeURIComponent(location.hash.slice(7)));
   if (r === "settings") renderSettings(ssec, ui);
   if (r === "sessions") { renderSessions(lsec, ui); sessTimer = setInterval(() => renderSessions(lsec, ui), 10000); }
-  if (r !== "board") window.scrollTo(0, 0);
+  // Measure the field only after the new view is shown and scrolled to its top: measured first, the board's nebula
+  // was placed at the previous view's scroll offset (847 px down after Graph) and looked missing.
+  if (r !== prevRoute) window.scrollTo(0, 0);
+  prevRoute = r;
+  nebula.apply();
   if (r === "work") renderWorkItem(wsec, decodeURIComponent(location.hash.slice(7)), ui);
   const m = location.hash.match(/^#\/decision\/(.+)$/);
   if (m) setTimeout(() => focusDecision(decodeURIComponent(m[1])), 400);

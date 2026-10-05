@@ -39,6 +39,34 @@ export function initNebula(ui) {
   const field = new Field(host, { band, labels, phone: () => phoneQ.matches });
   host.append(labels);
 
+  // Pull into the sky: at the top of the board, keep scrolling up (or pull down on a phone) and the nebula comes
+  // closer; past the threshold it dives into Sky. Transforms only (compositor), so the pull never relayouts.
+  const PULL = 260;
+  let pull = 0, pullIdle = null, touchY = null;
+  const setPull = (v) => {
+    pull = Math.max(0, Math.min(PULL, v));
+    root.style.setProperty("--nb-pull", (pull / PULL).toFixed(3));
+    root.classList.toggle("nb-pulling", pull > 0);
+  };
+  const scrolledInside = (t) => { for (let el = t; el && el !== document.body; el = el.parentElement) if (el.scrollTop > 0) return true; return false; };
+  const atTop = (t) => root.dataset.look === "nebula" && ui.route() === "board" && window.scrollY <= 0 && !scrolledInside(t)
+    && !(t && t.closest && t.closest("input, textarea, select, dialog, .pop"));
+  const dive = () => {
+    clearTimeout(pullIdle);
+    root.classList.add("nb-dive");
+    setTimeout(() => { location.hash = "#/sky"; root.classList.remove("nb-dive"); setPull(0); },
+      matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 420);
+  };
+  addEventListener("wheel", (e) => {
+    if (e.deltaY >= 0 || e.ctrlKey || !atTop(e.target)) { if (pull) setPull(0); return; }
+    setPull(pull - e.deltaY * 0.6);
+    clearTimeout(pullIdle);
+    if (pull >= PULL) dive(); else pullIdle = setTimeout(() => setPull(0), 350);
+  }, { passive: true });
+  addEventListener("touchstart", (e) => { touchY = e.touches.length === 1 && atTop(e.target) ? e.touches[0].clientY : null; }, { passive: true });
+  addEventListener("touchmove", (e) => { if (touchY != null) setPull((e.touches[0].clientY - touchY) * 1.3); }, { passive: true });
+  addEventListener("touchend", () => { if (touchY == null) return; touchY = null; if (pull >= PULL * 0.6) dive(); else setPull(0); }, { passive: true });
+
   const capsule = h("nav", { class: "nb-capsule", "aria-label": "Views" },
     [["#/sky", "sky", "Sky"], ["#/", "board", "Board"], ["#/graph", "graph", "Graph"], ["#/sessions", "chats", "Chats"], ["#/settings", "settings", "Settings"]]
       .map(([href, id, label]) => h("a", { href, dataset: { view: id } }, glyph(id), h("span", {}, label))));

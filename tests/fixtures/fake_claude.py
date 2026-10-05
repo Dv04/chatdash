@@ -20,12 +20,15 @@ elif args[:2] == ["auth", "login"]:
     print("If the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback")
     sys.stdout.write("Paste code here if prompted > ")
     sys.stdout.flush()
-    code = sys.stdin.readline().strip()
-    if code == "good-code":
-        open(f, "w").write("1")
-        print("Login successful")
-        sys.exit(0)
-    print("Invalid code")
-    sys.exit(1)
+    while True:                                  # like the real CLI: a wrong code is reported and it keeps waiting
+        code = sys.stdin.readline()
+        if not code:
+            sys.exit(1)
+        if code.strip() == "good-code":
+            open(f, "w").write("1")
+            print("Login successful")
+            sys.exit(0)
+        print("Invalid code. Please make sure the full code was copied.")
+        sys.stdout.flush()
 else:
     sys.exit(2)

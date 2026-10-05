@@ -17,12 +17,14 @@ Reply routing (measured 2026-09-25 on throwaway sessions, see chatdash README):
 """
 from __future__ import annotations
 
+import fcntl
 import os
-import pty
 import select
 import shlex
+import struct
 import subprocess
 import sys
+import termios
 import time
 
 from . import config
@@ -31,8 +33,12 @@ CLAUDE = config.claude_bin()
 PASTE_START, PASTE_END = b"\x1b[200~", b"\x1b[201~"
 
 
+ATTACH_ROWS, ATTACH_COLS = 50, 220   # an unsized pty is 0x0 and the CLI then wraps at 120, splitting long
+                                     # dialog labels across lines (measured 2026-10-05)
+
+
 def _env(cfg: str) -> dict:
-    env = dict(os.environ, TERM="xterm-256color", COLUMNS="140", LINES="45")
+    env = dict(os.environ, TERM="xterm-256color", COLUMNS=str(ATTACH_COLS), LINES=str(ATTACH_ROWS))
     for v in ("CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_SESSION_ID",
               "CLAUDE_SESSION_ID", "CLAUDE_PID", "CLAUDE_CODE_ENTRYPOINT", "CLAUDECODE", "CLAUDE_JOB_DIR"):
         env.pop(v, None)
@@ -82,8 +88,10 @@ def _input_ready(buf: bytes) -> bool:
     return b"\x1b[?2004h" in buf and "❯".encode() in buf     # bracketed paste on and the prompt box drawn
 
 
-def _transcript_has(path: str, text: str, since_size: int, timeout: float) -> bool:
-    """True once a user record containing `text` is appended after since_size."""
+def _transcript_has(path: str, text: str, since_size: int, timeout: float, fd: int | None = None,
+                    screen: list | None = None) -> bool:
+    """True once a user record containing `text` is appended after since_size. With `fd`, keeps reading the
+    attach pty while waiting (an unread pty can stall the client) and appends what it read to `screen`."""
     needle = text.strip()[:60]
     import json
     end = time.time() + timeout
@@ -106,8 +114,53 @@ def _transcript_has(path: str, text: str, since_size: int, timeout: float) -> bo
                             return True
         except OSError:
             pass
-        time.sleep(0.15)
+        if fd is None:
+            time.sleep(0.15)
+        else:
+            out = _drain(fd, 0.15)
+            if not out:
+                time.sleep(0.05)              # pty closed (attach exited): avoid a busy loop
+            elif screen is not None:
+                screen.append(out)
     return False
+
+
+def _spawn_attach(cfg: str, job_id: str, cwd: str | None):
+    """Run `claude attach <job>` on a fresh pty. openpty + Popen instead of pty.fork, which is
+    unsafe (and deprecated) in a multi-threaded server."""
+    d = cwd if cwd and os.path.isdir(cwd) else config.default_cwd()
+    if not os.path.isdir(d):
+        d = os.path.expanduser("~")
+    fd, slave = os.openpty()
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", ATTACH_ROWS, ATTACH_COLS, 0, 0))
+    try:
+        proc = subprocess.Popen([CLAUDE, "attach", job_id], stdin=slave, stdout=slave, stderr=slave,
+                                env=_env(cfg), cwd=d, start_new_session=True, close_fds=True)
+    except OSError:
+        os.close(fd)
+        raise
+    finally:
+        os.close(slave)
+    return proc, fd
+
+
+def _close_attach(proc, fd: int) -> None:
+    """Close the pty and end the attach client; the background session itself keeps running."""
+    try:
+        os.close(fd)
+    except OSError:
+        pass
+    for stop in (None, proc.terminate, proc.kill):
+        if stop:
+            try:
+                stop()
+            except OSError:
+                pass
+        try:
+            proc.wait(timeout=2)
+            return
+        except subprocess.TimeoutExpired:
+            continue
 
 
 def type_into_attach(cfg: str, job_id: str, text: str, cwd: str | None,
@@ -115,33 +168,22 @@ def type_into_attach(cfg: str, job_id: str, text: str, cwd: str | None,
     """Open `claude attach <job>` in a pty, paste the text, press Enter, confirm it landed
     in the transcript, then close the pty (the background session keeps running)."""
     size0 = os.path.getsize(transcript) if transcript and os.path.exists(transcript) else 0
-    pid, fd = pty.fork()
-    if pid == 0:
-        try:
-            os.chdir(cwd or config.default_cwd())
-        except OSError:
-            os.chdir(os.path.expanduser("~"))
-        os.execvpe(CLAUDE, [CLAUDE, "attach", job_id], _env(cfg))
+    proc, fd = _spawn_attach(cfg, job_id, cwd)
     screen = b""
     try:
         screen = _drain_until(fd, _input_ready, 6)
         os.write(fd, PASTE_START + text.encode() + PASTE_END)
-        time.sleep(0.4)
+        later: list = []
+        later.append(_drain(fd, 0.4))
         os.write(fd, b"\r")
-        landed = _transcript_has(transcript, text, size0, confirm_s) if transcript else None
+        landed = _transcript_has(transcript, text, size0, confirm_s, fd, later) if transcript else None
         _drain(fd, 0.2)
+        screen += b"".join(later)
     except OSError as e:                     # attach already exited (job gone or stopped): the pty is closed
         return {"ok": False, "route": "attach", "error": f"claude attach {job_id} exited before the prompt was "
                 f"typed ({e.strerror}); the chat may be gone", "screen": screen[-400:].decode(errors="replace")}
     finally:
-        try:
-            os.close(fd)
-        except OSError:
-            pass
-        try:
-            os.waitpid(pid, os.WNOHANG)
-        except ChildProcessError:
-            pass
+        _close_attach(proc, fd)
     if landed is False:
         tail = screen[-400:].decode(errors="replace")
         return {"ok": False, "route": "attach", "error": "prompt did not reach the transcript "
@@ -234,13 +276,7 @@ def answer_dialog(chat: dict, n: int, label: str = "", text: str = "") -> dict:
     arrow keys, then Enter (or types `text` into a 'Type something' option). Never guesses."""
     if not chat.get("job_id"):
         return {"ok": False, "error": "only background sessions can be answered here; use Terminal"}
-    pid, fd = pty.fork()
-    if pid == 0:
-        try:
-            os.chdir(chat.get("cwd") or config.default_cwd())
-        except OSError:
-            os.chdir(os.path.expanduser("~"))
-        os.execvpe(CLAUDE, [CLAUDE, "attach", chat["job_id"]], _env(chat["config"]))
+    proc, fd = _spawn_attach(chat["config"], chat["job_id"], chat.get("cwd"))
     try:
         dlg = parse_dialog(_strip_ansi(_drain_until(fd, lambda b: parse_dialog(_strip_ansi(b[-60000:])) is not None, 6, 0.3)))
         if not dlg:
@@ -275,14 +311,7 @@ def answer_dialog(chat: dict, n: int, label: str = "", text: str = "") -> dict:
         return {"ok": not same, "sent": sent, "next": after,
                 "error": "the dialog did not change; open Terminal to check" if same else None}
     finally:
-        try:
-            os.close(fd)
-        except OSError:
-            pass
-        try:
-            os.waitpid(pid, os.WNOHANG)
-        except ChildProcessError:
-            pass
+        _close_attach(proc, fd)
 
 
 def resume_bg(cfg: str, session_id: str, text: str, cwd: str | None) -> dict:

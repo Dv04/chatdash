@@ -618,7 +618,7 @@ def handle(method: str, path: str, query: dict, body: dict, src: "sources.Source
         if not accounts.valid_name(name):
             return 400, {"error": "name: lowercase letters, digits and dashes, up to 24 characters"}
         verb = parts[2] if len(parts) > 2 else "login"
-        fn = {"login": lambda: accounts.start_login(name, bool(body.get("console"))),
+        fn = {"login": lambda: accounts.start_login(name, bool(body.get("console")), bool(body.get("restart"))),
               "code": lambda: accounts.submit_code(name, str(body.get("code") or "")),
               "cancel": lambda: accounts.cancel(name), "disconnect": lambda: accounts.disconnect(name),
               "reconnect": lambda: accounts.reconnect(name),
@@ -626,6 +626,12 @@ def handle(method: str, path: str, query: dict, body: dict, src: "sources.Source
         if not fn:
             return 404, {"error": "unknown account action"}
         res = fn()
+        if res.get("ok") and verb in ("disconnect", "reconnect", "delete"):
+            try:
+                src.refresh()                 # the board's accounts change now, not on the next 1.5 s refresh
+            except Exception:
+                pass
+            _CACHE.clear()
         db.log_auto("account", "manual", None, name, verb if res.get("ok") else "failed", res.get("error") or "", {})
         return (200 if res.get("ok") else 409), res
     if method == "POST":

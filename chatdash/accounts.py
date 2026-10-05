@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-import pty
 import re
 import select
 import shutil
@@ -185,15 +184,17 @@ class Login:
     def __init__(self, name: str, d: str, console: bool = False):
         self.name, self.dir, self.started = name, d, time.time()
         self.state, self.error, self.urls, self.prompt, self.tail = "starting", None, [], False, ""
+        self.buf, self.code_mark, self.notice = "", None, None
         self.result: dict | None = None
         args = [config.claude_bin(), "auth", "login"] + (["--console"] if console else [])
-        self.pid, self.fd = pty.fork()
-        if self.pid == 0:
-            try:
-                os.chdir(d)
-                os.execvpe(args[0], args, _env(d))
-            finally:
-                os._exit(127)
+        # A pty pair and subprocess, not pty.fork(): forking a multi-threaded server can deadlock the child.
+        self.fd, slave = os.openpty()
+        try:
+            self.proc = subprocess.Popen(args, stdin=slave, stdout=slave, stderr=slave, env=_env(d), cwd=d,
+                                         start_new_session=True, close_fds=True)
+        finally:
+            os.close(slave)
+        self.pid = self.proc.pid
         threading.Thread(target=self._read, daemon=True).start()
 
     def _read(self) -> None:
@@ -213,7 +214,16 @@ class Login:
                     chunk = b""
                 if not chunk:
                     break
-                buf = (buf + ANSI_RE.sub("", chunk.decode(errors="replace")))[-20000:]
+                buf = buf + ANSI_RE.sub("", chunk.decode(errors="replace"))
+                if len(buf) > 40000:                       # keep the mark of the last code in step with the trim
+                    cut = len(buf) - 20000
+                    buf = buf[cut:]
+                    if self.code_mark is not None:
+                        self.code_mark = max(0, self.code_mark - cut)
+                self.buf = buf
+                if self.code_mark is not None:          # what Claude Code said after the last code, e.g. "Invalid code"
+                    m = re.search(r"(invalid[^\n>]*|error[^\n>]*|expired[^\n>]*)", buf[self.code_mark:], re.I)
+                    self.notice = m.group(1).strip()[:200] if m else None
                 for u in URL_RE.findall(buf):
                     u = u.rstrip(".,)")
                     if u not in self.urls:
@@ -222,8 +232,7 @@ class Login:
                 if self.state == "starting" and (self.urls or self.prompt):
                     self.state = "waiting"
                 self.tail = buf[-600:]
-            done = os.waitpid(self.pid, os.WNOHANG)[0] if self.pid else 0
-            if done:
+            if self.proc.poll() is not None:
                 self.pid = 0
                 break
         if self.state in ("starting", "waiting"):
@@ -243,6 +252,7 @@ class Login:
             return {"ok": False, "error": f"sign-in is {self.state}, not waiting for a code"}
         if not text or len(text) > 2000 or any(c in text for c in "\r\n\x1b"):
             return {"ok": False, "error": "that does not look like a sign-in code"}
+        self.code_mark, self.notice = len(self.buf), None
         try:
             os.write(self.fd, text.encode() + b"\r")            # typed into Claude Code's own prompt, never stored
         except OSError as e:
@@ -261,11 +271,12 @@ class Login:
         # The fallback link (code shown on claude.com) is the one to open from another device; the localhost one only
         # works in this computer's browser, which Claude Code opens by itself.
         manual = next((u for u in self.urls if "localhost" not in u and "127.0.0.1" not in u), None)
-        return {"state": self.state, "error": self.error, "link": manual, "wants_code": self.prompt and self.state == "waiting",
+        return {"state": self.state, "error": self.error, "notice": self.notice, "link": manual,
+                "wants_code": self.prompt and self.state == "waiting",
                 "age_s": round(time.time() - self.started), "result": self.result}
 
 
-def start_login(name: str, console: bool = False) -> dict:
+def start_login(name: str, console: bool = False, restart: bool = False) -> dict:
     """Create the account dir if needed and start signing it in."""
     if not valid_name(name):
         return {"ok": False, "error": "name: lowercase letters, digits and dashes, up to 24 characters"}
@@ -273,7 +284,9 @@ def start_login(name: str, console: bool = False) -> dict:
     with _lock:
         cur = _logins.get(name)
         if cur and cur.state in ("starting", "waiting"):
-            return {"ok": True, "login": cur.view(), "already": True}
+            if not restart:
+                return {"ok": True, "login": cur.view(), "already": True}
+            cur._stop("cancelled")                     # start over: a fresh sign-in link and prompt
         fresh = not os.path.exists(d)
         os.makedirs(os.path.join(d, "projects"), exist_ok=True)
         os.makedirs(os.path.join(d, "sessions"), exist_ok=True)

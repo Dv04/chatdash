@@ -43,15 +43,25 @@ def test_sign_in_with_the_code_prompt_creates_a_signed_in_account(env):
     assert rows["work"]["signed_in"] and rows["work"]["created_here"] and not rows["work"]["hidden"]
 
 
-def test_wrong_code_fails_and_bad_names_are_refused(env):
+def test_wrong_code_is_reported_then_a_right_code_or_start_over_works(env):
     assert not accounts.start_login("Bad Name!")["ok"]
     assert not accounts.start_login("../etc")["ok"]
     accounts.start_login("w2")
     wait("w2", ("waiting",))
     assert not accounts.submit_code("w2", "two\nlines")["ok"]
     accounts.submit_code("w2", "nope")
-    v = wait("w2", ("done", "failed"))
-    assert v["state"] == "failed" and accounts.listing()[0]["signed_in"] is False
+    end = time.time() + 5
+    while time.time() < end and not accounts.login_view("w2")["login"]["notice"]:
+        time.sleep(0.05)
+    v = accounts.login_view("w2")["login"]
+    assert v["state"] == "waiting" and v["notice"].lower().startswith("invalid code")
+    assert accounts.listing()[0]["signed_in"] is False
+    first = accounts._logins["w2"]
+    assert accounts.start_login("w2", restart=True)["ok"] and accounts._logins["w2"] is not first
+    wait("w2", ("waiting",))
+    assert accounts.login_view("w2")["login"]["notice"] is None
+    accounts.submit_code("w2", "good-code")
+    assert wait("w2", ("done", "failed"))["state"] == "done"
 
 
 def test_disconnect_hides_and_reconnect_shows(env):

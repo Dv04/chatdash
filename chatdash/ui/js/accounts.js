@@ -56,7 +56,10 @@ export async function renderAccounts(el, ui, { firstRun = false } = {}) {
         h("a", { href: lg.link, target: "_blank", rel: "noopener noreferrer" }, "open the sign-in link"),
         ", approve, then paste the code it shows:"),
       lg.link && h("div", { class: "replyrow" }, code, h("button", { class: "btn", onclick: send }, "Send code")),
-      h("button", { class: "btn ghost", onclick: () => act(`accounts/${encodeURIComponent(r.name)}/cancel`, {}, "Cancelled") }, "Cancel"));
+      lg.notice && h("p", { class: "acct-err", role: "alert" }, "Claude Code says: ", lg.notice),
+      h("div", { class: "acct-ctl" },
+        lg.notice && h("button", { class: "btn", onclick: () => act("accounts", { name: r.name, restart: true }, "New sign-in link") }, "Start over"),
+        h("button", { class: "btn ghost", onclick: () => act(`accounts/${encodeURIComponent(r.name)}/cancel`, {}, "Cancelled") }, "Cancel")));
   };
 
   const row = (r) => {

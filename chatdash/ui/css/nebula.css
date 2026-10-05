@@ -411,6 +411,7 @@
 .sky-cl.k-unknown { box-shadow: inset 0 0 0 1px var(--nb-unk); }
 .sky-lt { font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 7px; background: var(--nb-chip); color: var(--nb-label); max-width: 30ch; overflow: hidden; text-overflow: ellipsis; }
 .sky-lt.quiet { font-weight: 500; color: var(--nb-label-2); }
+@media (max-width: 760px) { .sky-lt { max-width: 22ch; font-size: 0.7rem; } }
 .sky-nogl { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); color: var(--ink-2); }
 
 .sky-hud { position: absolute; left: 104px; top: 20px; display: flex; align-items: center; gap: 18px; padding: 8px 16px; border-radius: 999px;

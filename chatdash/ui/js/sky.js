@@ -209,7 +209,7 @@ export class Sky {
 
   // Labels never pile up. Seat callouts: nearer seats keep their spot, a farther callout that would overlap is
   // nudged below it. Star names (needs-you first, then hover, then the seat you are inside) try right, left, above,
-  // below their star and take the first spot that is on screen and clear of every label, the HUD, the capsule and the
+  // below their star, then the diagonals and one row up or down, and take the first spot that is on screen and clear of every label, the HUD, the capsule and the
   // open glass; with no clear spot a name waits for hover.
   fixedRects() {
     const R = (el) => { const r = el.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; };
@@ -245,7 +245,9 @@ export class Sky {
       if (l.el.hidden) l.el.hidden = false;
       if (!l.w) { l.w = l.el.offsetWidth; l.h = l.el.offsetHeight; }
       const { x, y } = l.p, w = l.w, h2 = l.h;
-      const spots = [[x + 14, y - h2 / 2], [x - 14 - w, y - h2 / 2], [x - w / 2, y - 14 - h2], [x - w / 2, y + 14]];
+      const spots = [[x + 14, y - h2 / 2], [x - 14 - w, y - h2 / 2], [x - w / 2, y - 14 - h2], [x - w / 2, y + 14],
+        [x + 10, y - 10 - h2], [x + 10, y + 10], [x - 10 - w, y - 10 - h2], [x - 10 - w, y + 10],      // diagonals
+        [x + 14, y - h2 * 1.6 - 4], [x + 14, y + h2 * 0.6 + 4], [x - 14 - w, y - h2 * 1.6 - 4], [x - 14 - w, y + h2 * 0.6 + 4]];
       const ok = spots.find(([sx, sy]) => sx >= 6 && sy >= 6 && sx + w <= this.W - 6 && sy + h2 <= this.H - 6 && !taken.some((t) => hit([sx, sy, w, h2], t)));
       const spot = ok || (pr === 0 ? spots[0] : null);
       if (!spot) { l.el.hidden = true; continue; }

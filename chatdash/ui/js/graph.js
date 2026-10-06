@@ -21,6 +21,7 @@ export class Graph {
     this.layout = ui.store.get("graphLayout", "force");
     this.view = ui.store.get("graphView", "tree");
     this.filters = { seats: new Set(), states: new Set(), q: "" };
+    this.showFilters = false;
     this.expanded = new Set();
     this.pos = new Map();            // id -> {x, y, vx, vy, fixed}
     this.t = { k: 1, x: 0, y: 0 };
@@ -106,11 +107,12 @@ export class Graph {
     }
     const seats = [...new Set((this.data?.nodes || []).filter((n) => n.type === "seat").map((n) => n.seat))];
     const chip = (set, v, label) => h("button", { class: "chip toggle", "aria-pressed": String(set.has(v)),
-      onclick: () => { set.has(v) ? set.delete(v) : set.add(v); this.relayout(); } }, label);
+      onclick: () => { set.has(v) ? set.delete(v) : set.add(v); this.relayout(); this.renderBar(); } }, label);
     const q = h("input", { type: "search", class: "free g-q", placeholder: "Filter (/)", value: this.filters.q, "aria-label": "Filter nodes",
       oninput: (e) => { this.filters.q = e.target.value.toLowerCase(); this.relayout(); } });
     const sq = h("input", { type: "search", class: "free g-sq", placeholder: "Search files, PRs, chats", title: "Search files, PRs and chats (Enter)", value: this.sq || "",
       "aria-label": "Search everything", onkeydown: (e) => { if (e.key === "Enter") { this.sq = e.target.value; this.searchAll(this.sq); } } });
+    const nOn = this.filters.seats.size + this.filters.states.size;
     const layer = (k, l) => h("button", { class: "chip toggle", "aria-pressed": String(this.layers.has(k)), onclick: () => this.toggleLayer(k) }, l);
     // g-row wrappers are display: contents on desktop (same flow as before); on a phone each is one swipeable line
     const row = (cls, ...kids) => h("div", { class: "g-row " + cls }, ...kids);
@@ -119,14 +121,19 @@ export class Graph {
         this.pins.size > 0 && h("button", { class: "chip toggle", onclick: () => { this.pins.clear(); this.relayout(); this.renderBar(); } }, `clear ${this.pins.size} pinned`))),
       row("g-row-search", sq, this.hl && h("button", { class: "btn ghost", onclick: () => { this.sq = ""; this.clearSearch(); } }, `Clear search (${this.hl.size})`),
         h("button", { class: "btn", onclick: () => this.newChat() }, "+ New chat")),
-      row("g-row-filters", h("div", { class: "g-filters", role: "group", "aria-label": "Seats" }, seats.map((s) => chip(this.filters.seats, s, s))),
-        h("div", { class: "g-filters", role: "group", "aria-label": "States" }, STATES.map((s) => chip(this.filters.states, s, s.replace("_", " "))))),
       row("g-row-tools", q,
+        h("button", { class: "btn ghost", "aria-pressed": String(this.showFilters), "aria-expanded": String(this.showFilters),
+          title: "Filter by seat and state", onclick: () => { this.showFilters = !this.showFilters; this.renderBar(); } },
+          nOn ? `Filters · ${nOn}` : "Filters"),
         h("button", { class: "btn ghost", onclick: () => { this.userMoved = false; this.fit(); }, title: "Fit (0)" }, "Fit"),
         h("button", { class: "btn ghost", "aria-pressed": String(!this.table.hidden), onclick: () => this.toggleTable() }, "Table"),
-        h("button", { class: "btn ghost", "aria-pressed": String(!!this.frames24), onclick: () => this.toggleReplay() }, "Replay")),
-      this.frames24 && this.replayBar(),
-      h("span", { class: "hint g-legend" }, "color = state, size = spend today, red ring = needs you, dashed = unknown; squares = files, hexagons = PRs")].filter((x) => x != null && x !== false));
+        h("button", { class: "btn ghost", "aria-pressed": String(!!this.frames24), onclick: () => this.toggleReplay() }, "Replay"),
+        h("span", { class: "hint g-legend" }, "color = state, size = spend today, red ring = needs you, dashed = unknown; squares = files, hexagons = PRs")),
+      // seat and state chips stay folded behind Filters (with a count when any is on) so the bar is two lines, not four
+      this.showFilters && row("g-row-filters", h("div", { class: "g-filters", role: "group", "aria-label": "Seats" }, seats.map((s) => chip(this.filters.seats, s, s))),
+        h("div", { class: "g-filters", role: "group", "aria-label": "States" }, STATES.map((s) => chip(this.filters.states, s, s.replace("_", " ")))),
+        nOn > 0 && h("button", { class: "chip toggle", onclick: () => { this.filters.seats.clear(); this.filters.states.clear(); this.relayout(); this.renderBar(); } }, "clear filters")),
+      this.frames24 && this.replayBar()].filter((x) => x != null && x !== false));
   }
 
   // ------------------------------------------------------------------ B10 day replay

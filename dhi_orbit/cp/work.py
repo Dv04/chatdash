@@ -441,7 +441,8 @@ def holds(seat: dict) -> bool:
 
 def spawn(body: dict, snap: dict, runner=subprocess.run) -> tuple[int, dict]:
     wi, seat = body.get("work_item"), body.get("seat")
-    text = (body.get("brief") or "").strip()
+    text = body.get("brief")
+    text = text.strip() if isinstance(text, str) else ""
     if not seat:
         return 400, {"error": "seat required (you pick it)"}
     if config.is_read_only(seat):

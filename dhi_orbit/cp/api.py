@@ -511,6 +511,19 @@ _CACHE: dict[tuple, tuple[float, dict]] = {}
 
 
 def handle(method: str, path: str, query: dict, body: dict, src: "sources.Sources", ctx: dict | None = None) -> tuple[int, dict]:
+    """The API entry. A malformed parameter (?hours=abc, ?since=x) is a 400 and a bug is a 500 with its name; both used to
+    drop the connection with no answer at all (found 2026-10-06 by sweeping every GET route with bad input)."""
+    try:
+        return _handle(method, path, query, body, src, ctx)
+    except (ValueError, TypeError, KeyError) as e:
+        return 400, {"error": f"bad request: {type(e).__name__}: {e}"[:200]}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return 500, {"error": f"{type(e).__name__}: {e}"[:200]}
+
+
+def _handle(method: str, path: str, query: dict, body: dict, src: "sources.Sources", ctx: dict | None = None) -> tuple[int, dict]:
     """path is the part after /api/cp/ (no leading slash). ctx: {"sender": send.Sender, "dialog": fn(chat, n, label, text="")}
     for the user's own actions; without ctx the API is read-only (actions return 501)."""
     ctx = ctx or {}
@@ -737,7 +750,8 @@ def handle(method: str, path: str, query: dict, body: dict, src: "sources.Source
             return (200, {"ok": True, "proposal": p["id"]}) if p else (409, {"error": "a handoff is already proposed or done for this chat"})
         if head == "intent":
             from . import intent
-            text = (body.get("text") or "").strip()
+            text = body.get("text")
+            text = text.strip() if isinstance(text, str) else ""
             if not text or len(text) > 500:
                 return 400, {"error": "text required (max 500 chars)"}
             ictx, rev = intent.context_from(snap, db.rows("SELECT id, title FROM work_items"))

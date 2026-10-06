@@ -24,6 +24,7 @@ from ..extract import iso_epoch
 from . import limits
 
 NEAR_PCT = 80
+STALL_SHOW_S = 12 * 3600      # a limit banner whose reset passed longer ago than this is not a stalled chat (same cutoff as resume.MAX_STALL_S)
 
 
 def excluded(cfg: str | None) -> bool:
@@ -263,11 +264,11 @@ class Sources:
             m = meter.get(os.path.normpath(cfg)) or {}
             five = window(m.get("five"), m.get("five_resets"), now)
             seven = window(m.get("seven"), m.get("seven_resets"), now)
-            stalled = [c for c in chats if c["config"] == cfg and c.get("banner")]
+            stalled = [c for c in chats if c["config"] == cfg and c.get("banner") and c["banner"]["resets_at"] > now - STALL_SHOW_S]
             seen = {c["session_id"] for c in stalled}
             stalled += [{"session_id": j["session_id"], "name": j["name"], "banner": j["banner"]}
                         for j in jobs if j["config"] == cfg and j.get("banner") and j["state"] == "blocked"
-                        and j["session_id"] not in seen]
+                        and j["banner"]["resets_at"] > now - STALL_SHOW_S and j["session_id"] not in seen]
             until = max((c["banner"]["resets_at"] for c in stalled if c["banner"]["resets_at"] > now - 6 * 3600),
                         default=None)
             state = seat_state(five, seven, until, now)

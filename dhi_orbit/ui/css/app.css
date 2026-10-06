@@ -376,6 +376,8 @@ aside > section { display: flex; flex-direction: column; gap: var(--s3); min-wid
 .chip.toggle[aria-pressed="true"] { background: var(--sel); border-color: var(--action); color: var(--ink); }
 .g-q { width: 14em; }
 .g-legend { margin-left: auto; }
+.g-none { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: var(--s2); text-align: center; padding: var(--s5); }
+.g-none[hidden] { display: none; }
 .g-fresh { white-space: nowrap; }
 .g-fresh.g-stale { color: var(--bad); font-weight: 600; }
 @media (max-width: 760px) { .g-fresh:not(.g-stale) { display: none; } }

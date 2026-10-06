@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import secrets
+import sys
 import threading
 import time
 import urllib.parse
@@ -505,6 +506,16 @@ def best_seat(seats: dict) -> str:
     return next((a for a in names if a not in ro), names[0] if names else "")
 
 
+
+class QuietServer(ThreadingHTTPServer):
+    """A browser that navigates away mid-response is not an error: no traceback per closed tab."""
+
+    def handle_error(self, request, client_address):
+        if isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)):
+            return
+        super().handle_error(request, client_address)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         prog="dhi-orbit",
@@ -522,7 +533,7 @@ def main() -> None:
     st.refresh()
     threading.Thread(target=st.loop, args=(a.every,), daemon=True).start()
     ThreadingHTTPServer.request_queue_size = 128   # the default of 5 resets a browser's parallel module fetches
-    srv = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(st, token, a.port))
+    srv = QuietServer(("127.0.0.1", a.port), make_handler(st, token, a.port))
     print(f"DHI Orbit on http://127.0.0.1:{a.port}/v2/  ({len(st.chats)} chats, data dir {config.home()})", flush=True)
     srv.serve_forever()
 

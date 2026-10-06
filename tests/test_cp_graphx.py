@@ -149,3 +149,20 @@ def test_waiting_drops_dead_chats_whose_reset_passed_long_ago(tmp):
     w = graphx.waiting(s, [], None, NOW)
     items = [i["session_id"] for ch in w["chains"] for i in ch["items"]]
     assert sorted(items) == ["dead_recent", "live_old"]       # live idle chat still waits to be resumed; the dead 48 h one is history
+
+
+def test_bad_parameters_are_a_400_not_a_dropped_connection(tmp):
+    src = type("S", (), {"get": lambda self: snap(chat("s1")), "col": Col()})()
+    for path in ("graph/history?hours=abc", "gx/hot?window=abc", "gx/touches?since=x", "gx/spend?days=abc", "gx/overlaps?window=zz"):
+        p, _, qs = path.partition("?")
+        q = {k: [v] for k, v in (x.split("=") for x in qs.split("&") if x)}
+        code, out = api.handle("GET", p, q, {}, src)
+        assert code == 400 and out["error"].startswith("bad request"), (path, code, out)
+    assert api.handle("GET", "gx/hot", {}, {}, src)[0] == 200
+
+
+def test_intent_and_brief_reject_non_string_text(tmp):
+    src = type("S", (), {"get": lambda self: snap(chat("s1")), "col": Col()})()
+    for bad in (123, ["a"], {"x": 1}, None):
+        code, out = api.handle("POST", "intent", {}, {"text": bad}, src)
+        assert code == 400, (bad, code, out)

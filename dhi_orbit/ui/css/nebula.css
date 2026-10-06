@@ -624,6 +624,9 @@ a.sky-go b { color: var(--nb-need-dot, var(--ink)); }
   :root[data-look="nebula"] .sessions .sess-table select { height: 38px; }   /* iOS ignores min-height on a native select */
   :root[data-look="nebula"] .sessions .chat-tools { flex-wrap: wrap; }
   :root[data-look="nebula"] .sessions .chat-tools .field { flex: 1 1 100%; min-height: 40px; }
+  /* the chat page: the back link and the find box were under 32 px tall */
+  :root[data-look="nebula"] :is(.chat-title, .page) > a.hint { display: inline-flex; align-items: center; min-height: 32px; }
+  :root[data-look="nebula"] .chat-head input.field { min-height: 40px; }
 }
 
 /* very narrow phones (320 px): the five tool buttons ran into the status pill and the capsule was wider than the screen */

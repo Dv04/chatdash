@@ -52,7 +52,8 @@ export class Graph {
     this.menu = h("div", { class: "g-menu", role: "menu", hidden: true });
     this.mini = h("canvas", { class: "g-mini", width: 180, height: 120, "aria-hidden": "true" });
     this.table = h("div", { class: "g-table", hidden: true });
-    this.stage = h("div", { class: "g-stage" }, this.canvas, this.mini, this.tip, this.menu);
+    this.none = h("div", { class: "g-none", hidden: true, role: "status" });
+    this.stage = h("div", { class: "g-stage" }, this.canvas, this.mini, this.none, this.tip, this.menu);
     this.body = h("div", { class: "g-body" }, this.stage, this.panel);
     this.vw = h("div", { class: "gx-view", hidden: true });
     this.root.replaceChildren(this.bar, this.body, this.table, this.vw);
@@ -126,6 +127,21 @@ export class Graph {
   pin(item) { this.pins.set(item.path, { ...item, fromSearch: false }); this.relayout(); toast(`${item.label} pinned to the graph`); }
   unpin(path) { this.pins.delete(path); this.relayout(); }
   newChat(opts = {}) { this.ui.spawn(opts); }
+
+  // A blank canvas says nothing: say why it is blank (no chats at all, or the filters / search / ended-chats rule hide them all).
+  renderNone() {
+    const n = this.m.nodes.length, total = (this.data?.nodes || []).length;
+    this.none.hidden = n > 0 || !this.data;
+    if (n > 0 || !this.data) return;
+    const f = this.filters, filtered = f.seats.size + f.states.size > 0 || f.q || this.hl;
+    const kids = !total ? [h("strong", {}, "Nothing is running"), h("p", { class: "hint" }, "Chats from your accounts appear here as they start."),
+        h("button", { class: "btn primary", onclick: () => this.newChat() }, "+ New chat")]
+      : filtered ? [h("strong", {}, "No node matches"), h("p", { class: "hint" }, "The filters or the search hide everything."),
+        h("button", { class: "btn", onclick: () => { f.seats.clear(); f.states.clear(); f.q = ""; this.sq = ""; this.hl = null; this.hlFiles = null; this.renderBar(); this.relayout(); } }, "Clear filters and search")]
+      : [h("strong", {}, "Only ended chats"), h("p", { class: "hint" }, `${this.hiddenEnded} chats ended more than ${ENDED_KEEP_S / 3600} hours ago.`),
+        h("button", { class: "btn", onclick: () => { this.showEnded = true; this.ui.store.set("graphEnded", true); this.renderBar(); this.relayout(); } }, "Show them")];
+    this.none.replaceChildren(...kids);
+  }
 
   // How old is what is on screen. The feed keeps the last good value when the server cannot be reached, and the
   // collector's own snapshot can lag behind a healthy server: either way the map says so instead of looking live.
@@ -405,6 +421,7 @@ export class Graph {
     if (this.pos.size > this.m.nodes.length * 3 + 60) for (const id of [...this.pos.keys()]) if (!this.m.byId.has(id)) this.pos.delete(id);   // gone nodes
     if (this.layout === "lanes") this.lanes();
     if (reheat) this.alpha = this.layout === "force" ? Math.max(this.alpha, first ? 1 : 0.35) : 0.6;
+    this.renderNone();
     if (this._hid !== this.hiddenEnded) { this._hid = this.hiddenEnded; if (!this.bar.contains(document.activeElement)) this.renderBar(); }
     if (!this.table.hidden) this.renderTable();
     this.kick();
@@ -798,7 +815,7 @@ export class Graph {
     else if (k === "l") { this.layout = this.layout === "force" ? "lanes" : "force"; this.renderBar(); this.relayout(); }
     else if (k === "v") { this.view = { tree: "work", work: "repo", repo: "tree" }[this.view]; this.ui.store.set("graphView", this.view); this.renderBar(); this.relayout(); }
     else if (k === "T") this.toggleTable();
-    else if (k === "/") { ev.preventDefault(); this.bar.querySelector(".g-q").focus(); }
+    else if (k === "/") { ev.preventDefault(); this.bar.querySelector(".g-q")?.focus(); }
     else if (k === "ContextMenu" && this.focus) { const n = this.m.byId.get(this.focus), p = this.pos.get(n.id);
       this.openMenu(n, { clientX: this.canvas.getBoundingClientRect().left + p.x * this.t.k + this.t.x, clientY: this.canvas.getBoundingClientRect().top + p.y * this.t.k + this.t.y }); }
   }

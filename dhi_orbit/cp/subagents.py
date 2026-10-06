@@ -102,6 +102,10 @@ def live(chats_by_path: dict[str, dict], now: float) -> list[dict]:
     chats_by_path: transcript path -> chat dict (needs "live", "key", "account"). A chat whose process is gone has
     no running subagents, so its workers are dropped whatever their files say."""
     out = []
+    if len(_seen) > 200:                              # parents of long-gone chats: the scan cache must not grow for ever
+        with _lock:
+            for k in [k for k in _seen if k not in chats_by_path]:
+                del _seen[k]
     for parent, c in chats_by_path.items():
         if not c.get("live"):
             continue

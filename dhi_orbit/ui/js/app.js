@@ -248,8 +248,7 @@ function badge(ov) {
 function snapshot() {
   const ov = overview.data;
   if (!ov) return;
-  store.set("lastLooked", { at: Date.now(), needIds: ov.needs_you.map((x) => x.id),
-    limited: ov.needs_you.filter((x) => x.kind === "limit").map((x) => x.session_id) });
+  store.set("lastLooked", { at: Date.now(), needIds: ov.needs_you.map((x) => x.id) });
 }
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) snapshot();

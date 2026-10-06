@@ -80,15 +80,18 @@ async function continueOn(x, seat, ui) {
 }
 let parkedNode = null;   // {sig, el}: kept across refreshes so an open list and a chosen seat survive
 function parkedLine(parked, seats, ui) {
-  if (!parked.length) { parkedNode = null; return null; }
+  // chats that hit the limit themselves are kept out of NEEDS YOU until the reset (cp/api.py), so they come from the seat's own stalled list
+  const stalled = [];
+  for (const s of seats.values()) if (s.state === "blocked") for (const q of s.queued || []) if (!parked.some((x) => x.session_id === q.session_id)) stalled.push({ ...q, seat: s.seat });
+  if (!parked.length && !stalled.length) { parkedNode = null; return null; }
   const perDay0 = (ui.pace && ui.pace.pct_per_day) || 14.3;
-  const sig = JSON.stringify([parked.map((x) => [x.id, x.seat, x.title]), [...seats.values()].map((s) => [s.seat, s.state, s.resume_at]),
+  const sig = JSON.stringify([parked.map((x) => [x.id, x.seat, x.title]), stalled.map((q) => [q.session_id, q.seat, q.resets_at]), [...seats.values()].map((s) => [s.seat, s.state, s.resume_at]),
     parked.map((x) => continueSeats(x, seats, perDay0).map((c) => [c.s.seat, Math.round(c.spare ?? -999)]))]);
   if (parkedNode && parkedNode.sig === sig) return parkedNode.el;
   const prev = parkedNode && parkedNode.el;
   const wasOpen = !!(prev && prev.open), picked = new Map(prev ? [...prev.querySelectorAll("select")].map((e) => [e.dataset.id, e.value]) : []);
   const by = new Map();
-  for (const x of parked) by.set(x.seat, (by.get(x.seat) || 0) + 1);
+  for (const x of [...parked, ...stalled]) by.set(x.seat, (by.get(x.seat) || 0) + 1);
   const sum = [...by].map(([seat, n]) => {
     const s = seats.get(seat) || {};
     return `${s.label || seat} ${n} (${why(s)}${s.resume_at ? `, back ${ct(s.resume_at)}` : ""})`;
@@ -107,9 +110,13 @@ function parkedLine(parked, seats, ui) {
       sel, h("button", { class: "btn", disabled: !cands.length, title: "Start a new chat on that seat that reads this chat's transcript and carries on. The original stops auto-resuming and leaves this list.",
         onclick: (e) => { e.currentTarget.disabled = true; continueOn(x, sel.value, ui); } }, "Continue there"));
   });
+  const hit = stalled.map((q) => h("li", {},
+    h("span", { class: "t" }, q.name || "untitled"), h("span", { class: "chip" }, q.seat),
+    h("span", { class: "grow" }),
+    h("span", { class: "hint" }, `hit its limit${q.resets_at > Date.now() / 1000 ? `, resumes ${ct(q.resets_at)}` : ", reset passed"}`)));
   const el = h("details", { class: "parked", open: wasOpen },
-    h("summary", {}, `${parked.length} more parked until their seat frees: `, sum.join(", ")),
-    h("ul", {}, rows));
+    h("summary", {}, `${parked.length + stalled.length} more parked until their seat frees: `, sum.join(", ")),
+    h("ul", {}, [...rows, ...hit]));
   parkedNode = { sig, el };
   return el;
 }
@@ -190,13 +197,10 @@ export function sinceLine(ov, last) {
   const nowIds = new Set(ov.needs_you.map((x) => x.id));
   const closed = last.needIds.filter((id) => !nowIds.has(id));
   const fresh = ov.needs_you.filter((x) => !last.needIds.includes(x.id));
-  const resumed = (last.limited || []).filter((sid) => !ov.needs_you.some((x) => x.session_id === sid && x.kind === "limit"));
   return h("div", { class: "since", "aria-label": "Since you last looked" },
     h("span", {}, "Since you last looked: "),
     h("span", {}, h("b", {}, closed.length), " closed"),
     h("span", {}, h("b", {}, fresh.length), " new"),
-    h("span", {}, h("b", {}, "?"), " receipts (from S3)"),
-    h("span", {}, h("b", {}, resumed.length), " resumed"),
     h("span", { class: "when" }, ct(last.at / 1000, true)));
 }
 

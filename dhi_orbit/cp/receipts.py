@@ -124,7 +124,7 @@ def facts(turn: list[dict]) -> dict:
             m = EXIT_RE.search(out)
             checks.append({"cmd": cmd[:500], "last_line": lines[-1][:400] if lines else "",
                            "exit": int(m.group(1)) if m else (1 if err else None), "ran": tid in results,
-                           "test": bool(CHECK_RE.search(cmd))})
+                           "test": bool(CHECK_RE.search(cmd)), "hit": (CHECK_RE.search(cmd) or [None])[0]})
     return {"files": files, "checks": checks, "prs": sorted(prs), "cost_units": round(sum(usage.values()))}
 
 
@@ -203,9 +203,12 @@ def verdict(rc: dict, last_message: str) -> tuple[bool, str]:
             return True, f"the final quotes the output of: {cmd[:80]}"
         if c["test"]:
             m = CHECK_RE.search(c["cmd"])
-            phrase = m.group(0).strip().lower()
-            if " " not in phrase and phrase not in DISTINCT:     # "make" -> "make build": a bare common word proves nothing
-                phrase = " ".join(c["cmd"][m.start():].split()[:2]).lower()
+            if m:
+                phrase = m.group(0).strip().lower()
+                if " " not in phrase and phrase not in DISTINCT:     # "make" -> "make build": a bare common word proves nothing
+                    phrase = " ".join(c["cmd"][m.start():].split()[:2]).lower()
+            else:       # the runner name sat past the 500 characters kept of the command: it crashed every Stop hook (23 tracebacks)
+                phrase = (c.get("hit") or " ".join(c["cmd"].split()[:2])).strip().lower()
             if (phrase in DISTINCT and re.search(rf"\b{re.escape(phrase)}\b", low)) or (" " in phrase and phrase in low):
                 return True, f"check named in the final: {cmd[:80]}"
     if any(c["ran"] for c in rc["checks"]):

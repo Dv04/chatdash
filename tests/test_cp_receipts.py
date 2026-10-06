@@ -164,3 +164,13 @@ def test_plain_no_checks_statement_counts_as_honest():
     assert receipts.verdict(rc, "No additional checks run per your test instruction.")[0] is True
     assert receipts.verdict(rc, "Saved it without running any check.")[0] is True
     assert receipts.verdict(rc, "Saved it; everything works.")[0] is False
+
+
+def test_a_long_command_whose_runner_is_past_the_kept_text_does_not_crash_the_hook(tmp_path):
+    """23 Stop-hook tracebacks (2026-10-06): the test flag came from the full command, the verdict re-searched the 500 kept characters."""
+    rc = receipts.build(transcript(tmp_path), None)
+    rc["checks"] = [{"cmd": "cd /w && " + "x" * 520, "last_line": "", "exit": None, "ran": True, "test": True, "hit": "pytest"}]
+    assert receipts.verdict(rc, "Done, ran pytest")[0] is True
+    assert receipts.verdict(rc, "Done, all good")[0] is False
+    rc["checks"][0].pop("hit")
+    assert receipts.verdict(rc, "Done, all good")[0] is False        # an old row without the key still cannot crash

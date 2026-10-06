@@ -7,14 +7,14 @@ import sys
 
 import pytest
 
-from chatdash import collector, config, panels, server
-from chatdash.cp import db, sources, work, workitems
+from dhi_orbit import collector, config, panels, server
+from dhi_orbit.cp import db, sources, work, workitems
 
 
 @pytest.fixture
 def conf(tmp_path, monkeypatch):
     """Write config.json (the data dir's settings file) and return a function to set its content."""
-    p = tmp_path / "chatdash-home" / "config.json"
+    p = tmp_path / "orbit-home" / "config.json"
     p.parent.mkdir(parents=True, exist_ok=True)
 
     def put(**kw):
@@ -24,11 +24,44 @@ def conf(tmp_path, monkeypatch):
 
 
 def test_data_dir_defaults_to_dot_config_and_env_overrides(monkeypatch, tmp_path):
-    monkeypatch.delenv("CHATDASH_HOME", raising=False)
-    assert config.home() == os.path.expanduser("~/.config/chatdash")
-    monkeypatch.setenv("CHATDASH_HOME", str(tmp_path / "x"))
+    monkeypatch.delenv("DHI_ORBIT_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path / "fresh"))                       # no ~/.config/* at all
+    assert config.home() == str(tmp_path / "fresh" / ".config" / "dhi-orbit")
+    monkeypatch.setenv("DHI_ORBIT_HOME", str(tmp_path / "x"))
     assert config.home() == str(tmp_path / "x")
-    assert config.db_path() == str(tmp_path / "x" / "chatdash.db")
+    assert config.db_path() == str(tmp_path / "x" / "orbit.db")
+
+
+def test_legacy_home_dir_is_used_until_a_new_one_exists(monkeypatch, tmp_path):
+    monkeypatch.delenv("DHI_ORBIT_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    old, new = tmp_path / ".config" / "chatdash", tmp_path / ".config" / "dhi-orbit"
+    old.mkdir(parents=True)
+    assert config.home() == str(old)                                          # a chatdash install that has not moved
+    new.mkdir()
+    assert config.home() == str(new)                                          # the new dir wins once it exists
+
+
+def test_legacy_chatdash_env_vars_are_still_honoured_and_the_new_name_wins(monkeypatch, tmp_path):
+    monkeypatch.delenv("DHI_ORBIT_HOME", raising=False)
+    monkeypatch.setenv("CHATDASH_HOME", str(tmp_path / "old"))
+    assert config.home() == str(tmp_path / "old")
+    monkeypatch.setenv("CHATDASH_CONFIG", str(tmp_path / "old.json"))
+    assert config.path() == str(tmp_path / "old.json")
+    monkeypatch.setenv("DHI_ORBIT_HOME", str(tmp_path / "new"))
+    monkeypatch.setenv("DHI_ORBIT_CONFIG", str(tmp_path / "new.json"))
+    assert config.home() == str(tmp_path / "new") and config.path() == str(tmp_path / "new.json")
+    assert config.env("NOPE", "dflt") == "dflt" and config.env("NOPE", environ={"CHATDASH_NOPE": "v"}) == "v"
+
+
+def test_legacy_database_file_is_kept_until_a_new_one_exists(tmp_path):
+    h = tmp_path / "orbit-home"
+    h.mkdir()
+    assert config.db_path() == str(h / "orbit.db")                            # fresh install
+    (h / "chatdash.db").write_text("")
+    assert config.db_path() == str(h / "chatdash.db")                         # existing chatdash data
+    (h / "orbit.db").write_text("")
+    assert config.db_path() == str(h / "orbit.db")                            # the new name wins
 
 
 def test_token_is_created_on_first_run_with_mode_600_in_the_data_dir(tmp_path):
@@ -127,17 +160,23 @@ def test_live_reading_comes_only_from_the_optional_plugin(conf, monkeypatch, tmp
 
 
 def test_launchd_prefix_is_configurable_and_the_dashboard_job_is_protected(conf):
-    assert config.launchd_prefix() == "com.chatdash"
-    assert panels.is_protected("com.chatdash") and panels.is_protected("com.chatdash.server")
-    assert panels.is_protected("com.chatdash.tunnel") and not panels.is_protected("com.chatdash.backup")
+    assert config.launchd_prefix() == "com.dhi.orbit"
+    assert panels.is_protected("com.dhi.orbit") and panels.is_protected("com.dhi.orbit.server")
+    assert panels.is_protected("com.dhi.orbit.tunnel") and not panels.is_protected("com.dhi.orbit.backup")
     assert panels.schedule_toggle("com.other.job", True)["ok"] is False
-    assert "dashboard itself" in panels.schedule_toggle("com.chatdash.server", False)["error"]
+    assert "dashboard itself" in panels.schedule_toggle("com.dhi.orbit.server", False)["error"]
     conf(launchd_prefix="org.example.board")
     assert config.launchd_prefix() == "org.example.board"
     assert panels.is_protected("org.example.board.server") and not panels.is_protected("org.example.board.sync")
-    assert panels.schedule_toggle("com.chatdash.backup", True)["ok"] is False  # the old prefix no longer matches
+    assert panels.schedule_toggle("com.dhi.orbit.backup", True)["ok"] is False  # the old prefix no longer matches
     conf(launchd_prefix="bad prefix; rm -rf")
-    assert config.launchd_prefix() == "com.chatdash"
+    assert config.launchd_prefix() == "com.dhi.orbit"
+
+
+def test_orbit_and_legacy_chatdash_job_names_are_protected_under_a_custom_prefix(conf):
+    conf(launchd_prefix="com.example")
+    assert panels.is_protected("com.example.orbit") and panels.is_protected("com.example.chatdash")
+    assert not panels.is_protected("com.example.backup")
 
 
 def test_work_items_are_seeded_from_matching_chats_only(conf, tmp_path, monkeypatch):
@@ -156,11 +195,11 @@ def test_a_work_item_without_a_pattern_never_exists(tmp_path, monkeypatch):
 
 
 def test_state_docs_live_in_the_data_dir_by_default(tmp_path):
-    assert work.state_path("PROJ-1").startswith(str(tmp_path / "chatdash-home" / "work" / "state"))
+    assert work.state_path("PROJ-1").startswith(str(tmp_path / "orbit-home" / "work" / "state"))
 
 
 def test_clock_uses_the_configured_zone_else_local(conf):
-    from chatdash.cp import limits
+    from dhi_orbit.cp import limits
     at = 1_790_000_000.0
     conf(timezone="UTC")
     utc = limits.fmt_clock(at)
@@ -172,15 +211,15 @@ def test_clock_uses_the_configured_zone_else_local(conf):
 
 
 def test_login_page_and_cli_help_name_no_private_host(capsys):
-    assert "dhi" not in server.LOGIN_PAGE.lower()
+    assert "dhi-tech" not in server.LOGIN_PAGE.lower() and "DHI Orbit" in server.LOGIN_PAGE
     with pytest.raises(SystemExit) as e:
-        sys.argv = ["chatdash", "--help"]
+        sys.argv = ["dhi-orbit", "--help"]
         server.main()
     assert e.value.code == 0
-    assert "usage: chatdash" in capsys.readouterr().out
+    assert "usage: dhi-orbit" in capsys.readouterr().out
 
 
 def test_static_page_takes_the_public_url_from_config_not_from_the_source():
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    page = open(os.path.join(here, "chatdash", "static", "index.html"), encoding="utf-8").read()
+    page = open(os.path.join(here, "dhi_orbit", "static", "index.html"), encoding="utf-8").read()
     assert 'const PUBLIC_URL="__PUBLIC_URL__"' in page and 'value="https://' not in page

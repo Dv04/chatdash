@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from chatdash.cp import api, db, fileindex, graphx  # noqa: E402
+from dhi_orbit.cp import api, db, fileindex, graphx  # noqa: E402
 
 H = os.path.expanduser("~")
 NOW = 2_000_000_000.0

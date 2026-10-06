@@ -1,0 +1,10 @@
+{
+  "name": "DHI Orbit",
+  "short_name": "Orbit",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#16181d",
+  "theme_color": "#16181d",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

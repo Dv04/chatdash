@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Optional: feed chatdash's usage gauges from a Claude Code status line command.
+"""Optional: feed DHI Orbit's usage gauges from a Claude Code status line command.
 
 Claude Code runs a status line command and passes it a JSON document on stdin. When that document carries
 a "rate_limits" object (five_hour / seven_day with used_percentage and resets_at), this script appends one
-line to chatdash's meter log whenever the numbers change:
+line to DHI Orbit's meter log whenever the numbers change:
 
     <ISO time> TAB <config dir> TAB <session id> TAB <rate_limits JSON>
 
-chatdash reads that log (config meter_log, default <data dir>/meter.log). Without it the limits show as
+DHI Orbit reads that log (config meter_log, default <data dir>/meter.log). Without it the limits show as
 UNKNOWN; nothing is ever guessed.
 
 Use it from your own status line command, for example a script that runs
@@ -27,7 +27,12 @@ def main(stdin=sys.stdin, env=os.environ) -> int:
         limits = doc.get("rate_limits")
         if not isinstance(limits, dict) or not limits:
             return 0
-        home = os.path.abspath(os.path.expanduser(env.get("CHATDASH_HOME") or "~/.config/chatdash"))
+        home = env.get("DHI_ORBIT_HOME") or env.get("CHATDASH_HOME")      # CHATDASH_HOME: pre-rename installs
+        if not home:
+            home = "~/.config/dhi-orbit"
+            if not os.path.exists(os.path.expanduser(home)) and os.path.exists(os.path.expanduser("~/.config/chatdash")):
+                home = "~/.config/chatdash"
+        home = os.path.abspath(os.path.expanduser(home))
         os.makedirs(home, mode=0o700, exist_ok=True)
         cfg = os.path.abspath(os.path.expanduser(env.get("CLAUDE_CONFIG_DIR") or "~/.claude"))
         blob = json.dumps(limits, separators=(",", ":"), sort_keys=True)

@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from chatdash.cp import db, receipts, work  # noqa: E402
+from dhi_orbit.cp import db, receipts, work  # noqa: E402
 
 HOME = os.path.expanduser("~")
 
@@ -21,8 +21,8 @@ def tmp(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "CONFIG", str(cfg))
     monkeypatch.setattr(work, "STATE_DIR", str(tmp_path / "state"))
     monkeypatch.setattr(work, "HISTORY", str(tmp_path / "state" / ".history"))
-    monkeypatch.setenv("CHATDASH_CONFIG", str(tmp_path / "chatdash.json"))
-    (tmp_path / "chatdash.json").write_text(json.dumps({"read_only_accounts": ["main"]}))
+    monkeypatch.setenv("DHI_ORBIT_CONFIG", str(tmp_path / "orbit.json"))
+    (tmp_path / "orbit.json").write_text(json.dumps({"read_only_accounts": ["main"]}))
     os.makedirs(tmp_path / "state")
     db.init()
     work.init()

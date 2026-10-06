@@ -6,7 +6,7 @@ import os
 import re
 import sys
 
-CSS = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "chatdash", "ui", "css", "app.css")).read()
+CSS = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "dhi_orbit", "ui", "css", "app.css")).read()
 
 
 def block(sel_regex):
@@ -65,7 +65,7 @@ for name, t in (("light", light), ("dark", dark)):
 # Every glass, panel, chip and input token is alpha-composited (in gamma sRGB, as browsers blend) over the field
 # colours it can sit on: the void (darkest) and gradient centre for windows, and every particle hue as well (the
 # brightest areas) for what can pass over the band. The minimum over those colours is what is reported.
-NB = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "chatdash", "ui", "css", "nebula.css")).read()
+NB = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "dhi_orbit", "ui", "css", "nebula.css")).read()
 
 
 def nb_block(sel_regex):

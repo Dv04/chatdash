@@ -1,4 +1,4 @@
-"""Usage limits without setup: chatdash's status line meter per account (turn on, keep the owner's own status line
+"""Usage limits without setup: DHI Orbit's status line meter per account (turn on, keep the owner's own status line
 running, restore it exactly, record the limits), and the account flows that use it."""
 import io
 import json
@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from chatdash import accounts, config, statusline, usage_meter
+from dhi_orbit import accounts, config, statusline, usage_meter
 
 FAKE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "fake_claude.py")
 DOC = {"session_id": "s1", "model": {"display_name": "Opus"},
@@ -18,9 +18,9 @@ DOC = {"session_id": "s1", "model": {"display_name": "Opus"},
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
-    monkeypatch.setenv("CHATDASH_ACCOUNTS_ROOT", str(tmp_path / "home"))
-    monkeypatch.setenv("CHATDASH_HOME", str(tmp_path / "data"))
-    monkeypatch.setenv("CHATDASH_TRASH", str(tmp_path / "trash"))
+    monkeypatch.setenv("DHI_ORBIT_ACCOUNTS_ROOT", str(tmp_path / "home"))
+    monkeypatch.setenv("DHI_ORBIT_HOME", str(tmp_path / "data"))
+    monkeypatch.setenv("DHI_ORBIT_TRASH", str(tmp_path / "trash"))
     monkeypatch.setenv("CLAUDE_BIN", FAKE)
     monkeypatch.delenv("CP_METER_LOG", raising=False)
     os.makedirs(tmp_path / "home")
@@ -44,7 +44,7 @@ def settings(d):
 
 
 def run_statusline(d, doc, env):
-    """Run the command chatdash wrote, through a shell, the way Claude Code runs a status line."""
+    """Run the command DHI Orbit wrote, through a shell, the way Claude Code runs a status line."""
     cmd = settings(d)["statusLine"]["command"]
     e = dict(os.environ, CLAUDE_CONFIG_DIR=d, PYTHONPATH=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     p = subprocess.run(cmd, shell=True, input=json.dumps(doc).encode(), capture_output=True, env=e, timeout=20)
@@ -131,7 +131,7 @@ def test_connect_never_wraps_a_status_line_by_itself(env):
 
 
 def test_seat_rows_say_whether_the_meter_is_on(env):
-    from chatdash.cp import sources
+    from dhi_orbit.cp import sources
     d = acct(env, "work")
     assert usage_meter.meter_state(d) == "off"
     usage_meter.turn_on(d)
@@ -139,3 +139,47 @@ def test_seat_rows_say_whether_the_meter_is_on(env):
     usage_meter.turn_off(d)
     assert usage_meter.meter_state(d) == "off"
     assert hasattr(sources, "usage_meter")
+
+
+def test_names_are_dhi_orbit_and_the_command_pins_the_new_home_variable(env):
+    assert usage_meter.SAVED == "dhi-orbit-statusline.json" and usage_meter.MARK == "dhi_orbit.statusline"
+    assert usage_meter.command().startswith(f"DHI_ORBIT_HOME={env / 'data'} ")
+    assert f"-m {usage_meter.MARK}" in usage_meter.command()
+
+
+# a status line as chatdash (before the rename) wrote it: its command names chatdash.statusline and pins CHATDASH_HOME
+LEGACY_CMD = "CHATDASH_HOME=/old/data /usr/bin/python3 -m chatdash.statusline"
+
+
+def test_a_meter_installed_by_chatdash_is_detected_and_turn_on_rewrites_it_to_the_new_command(env):
+    own = {"type": "command", "command": "echo mine", "padding": 1}
+    d = acct(env, "old", {"statusLine": {"type": "command", "command": LEGACY_CMD, "padding": 3}})
+    (env / "home" / ".claude-old" / "chatdash-statusline.json").write_text(json.dumps({"statusLine": own}))
+    assert usage_meter.is_ours({"command": LEGACY_CMD}) and not usage_meter.is_ours({"command": "echo mine"})
+    assert usage_meter.status(d) == {"on": True, "wrapped": True, "other": False, "error": None}
+    assert usage_meter.meter_state(d) == "on"
+    assert usage_meter.turn_on(d) == {"ok": True, "on": True, "wrapped": True}
+    sl = settings(d)["statusLine"]
+    assert sl["command"] == usage_meter.command() and "chatdash.statusline" not in sl["command"] and sl["padding"] == 3
+    assert usage_meter.saved_command(d) == "echo mine"                 # the legacy saved file still feeds the wrapper
+    p = run_statusline(d, DOC, env)
+    assert p.returncode == 0 and p.stdout.decode().strip() == "mine"   # `echo mine` ran, the limits were recorded
+    assert os.path.exists(env / "data" / "meter.log")
+
+
+def test_turn_off_restores_the_status_line_from_the_legacy_saved_file_and_removes_it(env):
+    own = {"type": "command", "command": "echo mine", "padding": 1}
+    d = acct(env, "old", {"model": "opus", "statusLine": {"type": "command", "command": LEGACY_CMD}})
+    legacy = env / "home" / ".claude-old" / "chatdash-statusline.json"
+    legacy.write_text(json.dumps({"statusLine": own}))
+    assert usage_meter.turn_off(d) == {"ok": True, "on": False, "restored": True}
+    assert settings(d) == {"model": "opus", "statusLine": own} and not legacy.exists()
+
+
+def test_the_new_saved_file_wins_over_a_stale_legacy_one_and_new_wraps_use_the_new_name(env):
+    d = acct(env, "mix", {"statusLine": {"type": "command", "command": "echo mine"}})
+    (env / "home" / ".claude-mix" / "chatdash-statusline.json").write_text(json.dumps({"statusLine": {"command": "stale"}}))
+    usage_meter.turn_on(d)
+    assert os.path.exists(os.path.join(d, usage_meter.SAVED)) and usage_meter.saved_command(d) == "echo mine"
+    assert usage_meter.turn_off(d)["restored"] and settings(d)["statusLine"]["command"] == "echo mine"
+    assert not os.path.exists(os.path.join(d, usage_meter.SAVED))

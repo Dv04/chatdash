@@ -8,9 +8,9 @@ import unittest
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
-from chatdash import extract  # noqa: E402
-from chatdash import keepwarm  # noqa: E402
-from chatdash.keepwarm import KeepWarm, decide, judge, new_calls  # noqa: E402
+from dhi_orbit import extract  # noqa: E402
+from dhi_orbit import keepwarm  # noqa: E402
+from dhi_orbit.keepwarm import KeepWarm, decide, judge, new_calls  # noqa: E402
 
 NOW = 1_000_000.0
 

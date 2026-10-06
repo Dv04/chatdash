@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>DHI Orbit</title>
+<link rel="icon" id="favicon" href="data:,">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/nebula.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="theme-color" content="#16181d">
+<script>window.CP_TOKEN = "__TOKEN__";
+(function () { try {   /* Look (stage 1): ?look= wins, then the per-browser choice; "current" is the default */
+  var q = new URLSearchParams(location.search).get("look"), l = q || JSON.parse(localStorage.getItem("cp2.look") || '"current"'), x = location.hash;
+  if (l === "nebula") document.documentElement.dataset.look = "nebula";
+  if (l === "nebula" && (!x || x === "#/sky")) document.documentElement.dataset.view = "sky";     /* Sky opens first in the nebula look */
+  else if (!x || x === "#/" || x.indexOf("#/decision/") === 0) document.documentElement.dataset.view = "board";
+} catch (e) { /* storage blocked: current look */ } })();</script>
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<!--
+THESIS: an exception-led strip board: what waits on the user leads, evidence sits beside every claim; refuses the card-grid dashboard of equal tiles.
+OWN-WORLD: graphite operator surfaces, hairline rules, flight-strip rows with a state notch; color only for state (amber unknown, red blocked, green measured ok, blue action); system UI face, tabular numerals, mono only for verbatim data.
+STORY: The user sees in one glance whether anything waits, how long, and whether the data is trustworthy; answers from the strip; sees it delivered.
+FIRST VIEWPORT: sticky status rail (global state, waiting longest, counts, seat gauges); NEEDS YOU strips fill the main column; work items and sessions in the right column; since-last-looked line above the strips.
+FORM: pinned by the user (quiet operator look); concept-seed printed no roll.
+FINISH: documented in docs/DESIGN.md
+-->
+<a class="skip" href="#main">Skip to NEEDS YOU</a>
+<header class="rail" id="rail" aria-live="polite"></header>
+<section id="skyview" class="skyview" hidden aria-label="Sky"></section>
+<section id="graphview" class="graphview" hidden aria-label="Graph"></section>
+<section id="workview" class="workview" hidden aria-label="Work item"></section>
+<section id="chatview" class="workview" hidden aria-label="Chat history"></section>
+<section id="setview" class="workview" hidden aria-label="Settings"></section>
+<section id="sessview" class="workview" hidden aria-label="Sessions"></section>
+<div class="shell" id="shell">
+  <div class="col">
+    <main id="main" tabindex="-1"></main>
+    <section id="props" aria-label="Proposals"></section>
+  </div>
+  <aside id="side-wrap" aria-label="Capacity, work items and sessions">
+    <section id="cap"></section>
+    <section id="side"></section>
+  </aside>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

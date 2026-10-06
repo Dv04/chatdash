@@ -4,7 +4,7 @@
   "work_item_pattern": "PROJ-\\d+",
   "evidence_gate_work_items": [],
   "default_cwd": "~",
-  "launchd_prefix": "com.chatdash",
+  "launchd_prefix": "com.dhi.orbit",
   "timezone": "",
   "public_url": "",
   "meter_log": "",

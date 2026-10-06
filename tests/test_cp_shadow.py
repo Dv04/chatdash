@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from chatdash.cp import db, shadow  # noqa: E402
+from dhi_orbit.cp import db, shadow  # noqa: E402
 
 HOME = os.path.expanduser("~")
 

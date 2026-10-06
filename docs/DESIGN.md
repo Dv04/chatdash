@@ -1,6 +1,6 @@
-# Design: chatdash v2 mission board
+# Design: DHI Orbit v2 mission board
 
-Recorded from the built UI (chatdash/ui/css/app.css, chatdash/ui/js), not from intentions. Mode: Operate. Desk-first,
+Recorded from the built UI (dhi_orbit/ui/css/app.css, dhi_orbit/ui/js), not from intentions. Mode: Operate. Desk-first,
 phone second.
 
 ## World

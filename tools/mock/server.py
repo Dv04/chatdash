@@ -9,7 +9,7 @@ Scenarios (switch at runtime: GET /mock/scenario?name=...):
   empty    nothing needs you
   big      100+ graph nodes (graph performance test)
   truth    normal, but gamma has no reading and echo is at 98% 7-day (nebula field data-truth check)
-Token is the literal "mock". Nothing here reads real chats or touches chatdash.
+Token is the literal "mock". Nothing here reads real chats or touches DHI Orbit.
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-UI = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "chatdash", "ui")
+UI = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "dhi_orbit", "ui")
 TOKEN = "mock"
 STATE = {"scenario": "normal", "answers": [], "settings": {"focus": {"on": False, "min_age_min": 15, "windows": ["10:00", "14:00"]},
                                                            "modes": [], "keepwarm": {"available": False}, "pace": {"pct_per_day": 14.3}}}

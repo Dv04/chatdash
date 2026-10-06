@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from chatdash.cp import corrections, db, drafts, work  # noqa: E402
+from dhi_orbit.cp import corrections, db, drafts, work  # noqa: E402
 
 HOME = os.path.expanduser("~")
 
@@ -78,7 +78,7 @@ def test_drafter_dry_run_makes_retrieved_draft_and_marks_used(tmp):
 
 
 # ------------------------------------------------------------------ intent routing (B7/B9)
-from chatdash.cp import intent  # noqa: E402
+from dhi_orbit.cp import intent  # noqa: E402
 
 CTX = {"chats": ["PROJ-08 Research writeup - paper 08 run", "PROJ-10 Repos and code review", "game bug fixes"],
        "work_items": ["PROJ-08", "PROJ-10", "PROJ-14"], "seats": ["alpha", "work", "tryalpha"]}

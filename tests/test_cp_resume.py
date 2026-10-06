@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from chatdash.cp import db, resume  # noqa: E402
+from dhi_orbit.cp import db, resume  # noqa: E402
 
 HOME = os.path.expanduser("~")
 NOW = 100_000.0
@@ -152,7 +152,7 @@ def test_per_chat_on_works_when_global_is_off_and_default_restores_global(tmp):
 
 
 def test_keepwarm_pauses_on_a_spent_seat():
-    from chatdash import keepwarm
+    from dhi_orbit import keepwarm
     row = {"stop_at": NOW + 3600, "fails": 0, "last_attempt": 0, "units": 0, "pings": 0}
     c = {"kind": "bg", "job_id": "j", "state": "idle", "cache_age_min": 56.0, "ctx_tokens": 100_000, "ttl": "1h"}
     assert keepwarm.decide(c, row, NOW, seat={"five": 100, "seven": 20})[0] == "wait"
@@ -161,7 +161,7 @@ def test_keepwarm_pauses_on_a_spent_seat():
 
 
 # ------------------------------------------------------------------ idle compaction
-from chatdash.cp import idlecompact  # noqa: E402
+from dhi_orbit.cp import idlecompact  # noqa: E402
 
 ISEAT = {"config": HOME + "/.claude-work", "five_hour": {"pct": 40}, "seven_day": {"pct": 30}}
 
@@ -299,7 +299,7 @@ def _ka_transcript(tmp_path, reply_ts=None):
 
 
 def test_idle_race_waits_for_the_second_pings_reply_then_compacts(tmp, tmp_path):
-    from chatdash.extract import iso_epoch
+    from dhi_orbit.extract import iso_epoch
     t_ping = iso_epoch("2026-10-03T01:50:00Z")
     kw = KW({"work:s1"})
     r = idlecompact.IdleCompactor(kw=kw, sender=lambda c, t: {"ok": True}, mode_fn=lambda n: "dry-run", every=0)
@@ -311,7 +311,7 @@ def test_idle_race_waits_for_the_second_pings_reply_then_compacts(tmp, tmp_path)
 
 
 def test_idle_unanswered_ping_goes_cold_after_two_minutes(tmp, tmp_path):
-    from chatdash.extract import iso_epoch
+    from dhi_orbit.extract import iso_epoch
     t_ping = iso_epoch("2026-10-03T01:50:00Z")
     r = idlecompact.IdleCompactor(kw=KW({"work:s1"}), sender=lambda c, t: {"ok": True}, mode_fn=lambda n: "dry-run", every=0)
     c = ichat(path=_ka_transcript(tmp_path), cache_age_min=56.0)

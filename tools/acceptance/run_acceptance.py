@@ -253,7 +253,7 @@ def main():
         checks += suite(a, "nebula") + nebula_only(a)
 
     when = time.strftime("%Y-%m-%d %H:%M") + " CT"
-    md = ["# chatdash v2 acceptance (B11 + nebula stage 1)\n", f"Run {when} by run_acceptance.py; live server {a.live} (real data), mock {a.mock} (synthetic).\n",
+    md = ["# DHI Orbit v2 acceptance (B11 + nebula stage 1)\n", f"Run {when} by run_acceptance.py; live server {a.live} (real data), mock {a.mock} (synthetic).\n",
           "| Check | Result | Evidence |", "|---|---|---|"]
     for name, ok, ev in checks:
         md.append(f"| {name} | {'PASS' if ok else 'FAIL'} | {str(ev).replace('|', '/')[:400]} |")

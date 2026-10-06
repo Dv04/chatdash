@@ -4,16 +4,16 @@ import time
 
 import pytest
 
-from chatdash import accounts, config
+from dhi_orbit import accounts, config
 
 FAKE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "fake_claude.py")
 
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
-    monkeypatch.setenv("CHATDASH_ACCOUNTS_ROOT", str(tmp_path / "home"))
-    monkeypatch.setenv("CHATDASH_HOME", str(tmp_path / "data"))
-    monkeypatch.setenv("CHATDASH_TRASH", str(tmp_path / "trash"))
+    monkeypatch.setenv("DHI_ORBIT_ACCOUNTS_ROOT", str(tmp_path / "home"))
+    monkeypatch.setenv("DHI_ORBIT_HOME", str(tmp_path / "data"))
+    monkeypatch.setenv("DHI_ORBIT_TRASH", str(tmp_path / "trash"))
     monkeypatch.setenv("CLAUDE_BIN", FAKE)
     os.makedirs(tmp_path / "home")
     config._CACHE.clear()
@@ -97,3 +97,19 @@ def test_cancel_stops_a_pending_sign_in(env):
     accounts.cancel("w5")
     v = wait("w5", ("cancelled",))
     assert v["state"] == "cancelled"
+
+
+def test_account_marker_is_the_new_name_and_the_legacy_chatdash_marker_is_still_recognised(env):
+    assert accounts.MARK == ".dhi-orbit-account" and accounts.LEGACY_MARK == ".chatdash-account"
+    for name, mark in (("old", accounts.LEGACY_MARK), ("new", accounts.MARK), ("plain", None)):
+        d = accounts.dir_of(name)
+        os.makedirs(os.path.join(d, "projects"))
+        os.makedirs(os.path.join(d, "sessions"))
+        if mark:
+            open(os.path.join(d, mark), "w").close()
+    rows = {x["name"]: x for x in accounts.listing(with_status=False)}
+    assert rows["old"]["created_here"] and rows["new"]["created_here"] and not rows["plain"]["created_here"]
+    accounts.start_login("fresh")
+    accounts.cancel("fresh")
+    assert os.path.exists(os.path.join(accounts.dir_of("fresh"), ".dhi-orbit-account"))
+    assert not os.path.exists(os.path.join(accounts.dir_of("fresh"), ".chatdash-account"))

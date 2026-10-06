@@ -1,4 +1,4 @@
-# secrets and runtime data (these live in ~/.config/chatdash by default, never in the repo)
+# secrets and runtime data (these live in ~/.config/dhi-orbit by default, never in the repo)
 .token
 public.json
 config.json

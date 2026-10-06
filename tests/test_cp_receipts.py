@@ -9,8 +9,8 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from chatdash.cp import db, receipts  # noqa: E402
-from chatdash.cp.hooks import stop_hook  # noqa: E402
+from dhi_orbit.cp import db, receipts  # noqa: E402
+from dhi_orbit.cp.hooks import stop_hook  # noqa: E402
 
 HOME = os.path.expanduser("~")
 
@@ -54,7 +54,7 @@ def tmp(tmp_path, monkeypatch):
     cfg = tmp_path / "config.json"
     cfg.write_text(json.dumps(conf(stop_gate="on")))
     monkeypatch.setattr(db, "CONFIG", str(cfg))
-    monkeypatch.setenv("CHATDASH_CONFIG", str(cfg))
+    monkeypatch.setenv("DHI_ORBIT_CONFIG", str(cfg))
     db.init()
     return cfg
 

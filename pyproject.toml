@@ -3,8 +3,8 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "chatdash"
-version = "0.2.0"
+name = "dhi-orbit"
+version = "0.3.0"
 description = "A local dashboard for every Claude Code chat across your config dirs."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,16 +20,22 @@ classifiers = [
 dependencies = []          # standard library only
 
 [project.scripts]
-chatdash = "chatdash.server:main"
-chatdash-ask-hook = "chatdash.cp.hooks.ask_hook:cli"
-chatdash-stop-hook = "chatdash.cp.hooks.stop_hook:cli"
-chatdash-statusline = "chatdash.statusline:main"
+dhi-orbit = "dhi_orbit.server:main"
+orbit = "dhi_orbit.server:main"
+dhi-orbit-ask-hook = "dhi_orbit.cp.hooks.ask_hook:cli"
+dhi-orbit-stop-hook = "dhi_orbit.cp.hooks.stop_hook:cli"
+dhi-orbit-statusline = "dhi_orbit.statusline:main"
+# legacy names from before the rename, so existing installs and hook settings keep working
+chatdash = "dhi_orbit.server:main"
+chatdash-ask-hook = "dhi_orbit.cp.hooks.ask_hook:cli"
+chatdash-stop-hook = "dhi_orbit.cp.hooks.stop_hook:cli"
+chatdash-statusline = "dhi_orbit.statusline:main"
 
 [tool.setuptools]
-packages = ["chatdash", "chatdash.cp", "chatdash.cp.hooks"]
+packages = ["dhi_orbit", "dhi_orbit.cp", "dhi_orbit.cp.hooks"]
 
 [tool.setuptools.package-data]
-chatdash = ["ui/*", "ui/js/*", "ui/css/*", "static/*"]
+dhi_orbit = ["ui/*", "ui/js/*", "ui/css/*", "static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

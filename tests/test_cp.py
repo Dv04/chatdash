@@ -11,7 +11,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from chatdash.cp import api, db, devserver, limits, resume, sources  # noqa: E402
+from dhi_orbit.cp import api, db, devserver, limits, resume, sources  # noqa: E402
 from zoneinfo import ZoneInfo  # noqa: E402
 
 CT = ZoneInfo("America/Chicago")
@@ -58,7 +58,7 @@ def test_banner_inside_job_needs_text():
 def test_not_a_banner(tmp_path, monkeypatch):
     cfg = tmp_path / "tz.json"
     cfg.write_text(json.dumps({"timezone": "America/Chicago"}))
-    monkeypatch.setenv("CHATDASH_CONFIG", str(cfg))
+    monkeypatch.setenv("DHI_ORBIT_CONFIG", str(cfg))
     assert limits.parse_banner("I hit a limit in the test fixture, resets nothing", time.time()) is None
     assert limits.fmt_clock(ct(2026, 10, 2, 16, 40)) == "4:40pm"
     assert limits.fmt_clock(ct(2026, 10, 2, 5, 0)) == "5am"
@@ -163,7 +163,7 @@ def _ask_transcript(tmp_path, answered: bool, error: bool = False):
 
 
 def test_decision_answered_in_terminal_closes(tmpdb, tmp_path):
-    from chatdash.cp import decisions
+    from dhi_orbit.cp import decisions
     t = _ask_transcript(tmp_path, answered=True)
     db.execute("INSERT INTO decisions(id, session_id, question, asked_at, state, options, tool_use_id, evidence)"
                " VALUES('s5-abc','s5','Which?',50,'open','[]','toolu_abc',?)", (json.dumps({"transcript": t}),))
@@ -176,7 +176,7 @@ def test_decision_answered_in_terminal_closes(tmpdb, tmp_path):
 
 
 def test_decision_unanswered_stays_open_even_after_session_ends(tmpdb, tmp_path):
-    from chatdash.cp import decisions
+    from dhi_orbit.cp import decisions
     t = _ask_transcript(tmp_path, answered=False)
     db.execute("INSERT INTO decisions(id, session_id, question, asked_at, state, options, tool_use_id, evidence)"
                " VALUES('s5-abc','s5','Which?',50,'open','[]','toolu_abc',?)", (json.dumps({"transcript": t}),))
@@ -250,7 +250,7 @@ def test_excluded_seat(tmp_path, monkeypatch):
     assert sources.excluded(None)                                          # no config dir: nothing to act on
     cfg = tmp_path / "ro.json"
     cfg.write_text(json.dumps({"read_only_accounts": ["main", "audit"]}))
-    monkeypatch.setenv("CHATDASH_CONFIG", str(cfg))
+    monkeypatch.setenv("DHI_ORBIT_CONFIG", str(cfg))
     assert sources.excluded(os.path.expanduser("~/.claude"))
     assert sources.excluded(os.path.expanduser("~/.claude-audit"))
     assert not sources.excluded(os.path.expanduser("~/.claude-work"))
@@ -267,7 +267,7 @@ def test_mode_defaults_to_dry_run(tmp_path, monkeypatch):
 
 def test_every_auto_action_defaults_to_dry_run(tmp_path, monkeypatch):
     """No config file is shipped: with none, every auto-action the page lists is dry-run (never on)."""
-    monkeypatch.setenv("CHATDASH_CONFIG", str(tmp_path / "absent.json"))
+    monkeypatch.setenv("DHI_ORBIT_CONFIG", str(tmp_path / "absent.json"))
     monkeypatch.setattr(db, "CONFIG", None)
     assert api.MODE_DOCS and all(db.mode(k) == "dry-run" for k in api.MODE_DOCS)
 
@@ -354,7 +354,7 @@ def test_put_modes_writes_config_atomically_and_validates(tmpdb, tmp_path, monke
 
 
 def test_transcript_entries_include_thinking_tools_and_results(tmp_path):
-    from chatdash.cp import transcript
+    from dhi_orbit.cp import transcript
     p = tmp_path / "t.jsonl"
     recs = [
         {"type": "user", "timestamp": "2026-10-03T00:00:00Z", "message": {"content": "fix the bug"}},
@@ -425,7 +425,7 @@ def test_blocked_since_from_timeline(tmp_path):
             {"at": "2026-10-03T21:14:43.355Z", "state": "blocked", "detail": "awaiting permission"},
             {"at": "2026-10-03T21:18:20.196Z", "state": "blocked", "detail": "Yes, I provide you yes"}]
     t.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
-    from chatdash.extract import iso_epoch
+    from dhi_orbit.extract import iso_epoch
     assert sources.blocked_since(str(t)) == iso_epoch("2026-10-03T21:14:43.355Z")
     assert sources.blocked_since(str(tmp_path / "missing.jsonl")) is None
 

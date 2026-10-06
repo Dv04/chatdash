@@ -8,8 +8,8 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from chatdash.cp import db, decisions, risk  # noqa: E402
-from chatdash.cp.hooks import ask_hook  # noqa: E402
+from dhi_orbit.cp import db, decisions, risk  # noqa: E402
+from dhi_orbit.cp.hooks import ask_hook  # noqa: E402
 
 HOME = os.path.expanduser("~")
 BG_ENV = {"CLAUDE_CONFIG_DIR": HOME + "/.claude-work", "CLAUDE_JOB_DIR": HOME + "/.claude-work/jobs/abcd1234"}
@@ -22,7 +22,7 @@ def tmp(tmp_path, monkeypatch):
     cfg.write_text(json.dumps({"decision_hook": "on", "decision_hold_s": 5, "read_only_accounts": ["main"]}))
     monkeypatch.setattr(db, "DB", p)
     monkeypatch.setattr(db, "CONFIG", str(cfg))
-    monkeypatch.setenv("CHATDASH_CONFIG", str(cfg))
+    monkeypatch.setenv("DHI_ORBIT_CONFIG", str(cfg))
     db.init()
     return cfg
 
@@ -179,7 +179,7 @@ def test_hook_fails_open_on_garbage():
 
 
 # ------------------------------------------------------------------ replies (send.Sender)
-from chatdash.cp import send  # noqa: E402
+from dhi_orbit.cp import send  # noqa: E402
 
 
 class Src:

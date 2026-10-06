@@ -302,29 +302,16 @@ def graph(snap: dict, now: float) -> dict:
                       "seat": seat, "spend": 0, "parent": None})
         if seat:
             edges.append({"from": jid, "to": f"seat:{seat}", "kind": "runs_on"})
-    # subagents and other workers spawned by a visible session: transcripts under <session>/subagents/
-    import glob as _glob
-    import os as _os
-    for c in snap["chats"]:
-        if not visible(c) or not c.get("path"):
-            continue
-        for p in _glob.glob(c["path"][:-6] + "/subagents/*.jsonl"):
-            try:
-                mt = _os.path.getmtime(p)
-            except OSError:
-                continue
-            if now - mt > 1800:
-                continue
-            jid = f"job:sub:{_os.path.basename(p)[:-6]}"
-            try:
-                meta = json.load(open(p[:-6] + ".meta.json"))
-            except (OSError, ValueError):
-                meta = {}
-            label = (meta.get("agentType") or "subagent") + (": " + meta["description"] if meta.get("description") else "")
-            nodes.append({"id": jid, "type": "job", "label": label[:80],
-                          "state": "working" if now - mt < 90 else "idle", "seat": c["account"], "spend": 0,
-                          "parent": f"session:{c['key']}", "activity": mt})
-            edges.append({"from": jid, "to": f"session:{c['key']}", "kind": "spawned_by"})
+    # Subagents of a visible, live chat that are still running (cp/subagents.py: a terminal task-notification in the
+    # parent transcript or an ended last turn means finished; those are not nodes).
+    from . import subagents
+    for s in subagents.live({c["path"]: c for c in snap["chats"] if visible(c) and c.get("path")}, now):
+        c = s["chat"]
+        label = s["agent_type"] + (": " + s["description"] if s["description"] else "")
+        nodes.append({"id": f"job:sub:{s['id']}", "type": "job", "label": label[:80], "state": s["state"], "seat": c["account"],
+                      "spend": 0, "parent": f"session:{c['key']}", "activity": s["activity"], "agent": s["agent_type"],
+                      "tool": s["tool"], "session_id": None, "parent_session_id": c["session_id"]})
+        edges.append({"from": f"job:sub:{s['id']}", "to": f"session:{c['key']}", "kind": "spawned_by"})
     try:
         from . import work
         keys = {c["session_id"]: c["key"] for c in snap["chats"]}
@@ -335,7 +322,7 @@ def graph(snap: dict, now: float) -> dict:
         pass
     ids = {n["id"] for n in nodes}
     edges = [e for e in edges if e["from"] in ids and e["to"] in ids]
-    return {"generated_at": now, "nodes": nodes, "edges": edges}
+    return {"generated_at": now, "snapshot_at": snap.get("at"), "nodes": nodes, "edges": edges}
 
 
 def decisions(state: str | None) -> dict:
@@ -555,7 +542,13 @@ def handle(method: str, path: str, query: dict, body: dict, src: "sources.Source
         if head == "graph" and len(parts) == 2 and parts[1] == "history":
             hours = min(48.0, float(q1("hours") or 24))
             rows = db.rows("SELECT at, frame FROM cp_graph_history WHERE at > ? ORDER BY at", (now - hours * 3600,))
-            return 200, {"frames": [{"at": r["at"], "nodes": json.loads(r["frame"])} for r in rows]}
+            frames = [(r["at"], json.loads(r["frame"])) for r in rows]
+            if q1("compact"):
+                # ids once, then [index, state, needs_you] per node per frame: 5.6 MB for a day became about a fifth
+                idx: dict[str, int] = {}
+                out = [{"at": at, "nodes": [[idx.setdefault(n[0], len(idx)), n[1], n[2]] for n in fr]} for at, fr in frames]
+                return 200, {"ids": list(idx), "frames": out}
+            return 200, {"frames": [{"at": at, "nodes": fr} for at, fr in frames]}
         if head == "decisions" and len(parts) == 1:
             return 200, decisions(q1("state"))
         if head == "metrics":

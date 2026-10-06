@@ -17,6 +17,13 @@ export function h(tag, attrs = {}, ...kids) {
   return el;
 }
 
+// Native replaceChildren/append/prepend turn a skipped `cond && h(...)` into the text "false", "undefined" or "null"
+// (the graph panel read "undefinedundefinedfalsefalse..."). Every call site is safe now: those values are dropped.
+for (const m of ["replaceChildren", "append", "prepend"]) {
+  const native = Element.prototype[m];
+  Element.prototype[m] = function (...kids) { return native.apply(this, kids.filter((x) => x != null && x !== false && x !== true)); };
+}
+
 const SVG = "http://www.w3.org/2000/svg";
 const PATHS = {
   ok: "M3 8.5l3 3 7-7",

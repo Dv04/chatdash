@@ -98,6 +98,7 @@ const overview = new Feed("overview", 5000, onOverview);
 const props = document.getElementById("props");
 const wsec = document.getElementById("workview");
 const graph = new Feed("graph", 10000, () => {
+  if (gview) gview.renderFresh();                // the age line must move even when the data did not
   const s = dataSig(graph);
   if (s === grSig) return;
   grSig = s;
@@ -153,7 +154,7 @@ function applyRoute() {
   const m = location.hash.match(/^#\/decision\/(.+)$/);
   if (m) setTimeout(() => focusDecision(decodeURIComponent(m[1])), 400);
   if (r === "graph") {
-    if (!gview) gview = new Graph(gsec, ui);
+    if (!gview) { gview = new Graph(gsec, ui); gview.setFeed(graph); }
     if (graph.data) gview.update(graph.data);
     graph.now();
     gview.canvas.focus();

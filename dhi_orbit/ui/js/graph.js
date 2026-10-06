@@ -12,6 +12,8 @@ const KIND_EDGES = { tree: new Set(["runs_on", "spawned_by"]), work: new Set(["b
   repo: new Set(["in_repo", "spawned_by", "collides_with"]) };
 const LAYER_EDGES = new Set(["touched", "opened", "pinned"]);
 const STATES = ["needs_you", "working", "idle", "stopped", "unknown"];
+const ENDED_KEEP_S = 2 * 3600;      // a chat whose process is gone leaves the map after this, unless "ended chats" is on
+const STALE_S = 45;                 // graph data older than this is flagged, never shown as live
 
 function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 
@@ -31,6 +33,8 @@ export class Graph {
     this.layers = new Set(ui.store.get("graphLayers", []));
     this.pins = new Map();           // path -> {path, label, dir, sessions}
     this.hot = []; this.prs = []; this.hl = null; this.hlFiles = null; this.changes = new Map(); this.flash = new Set();
+    this.showEnded = ui.store.get("graphEnded", false);
+    this.hiddenEnded = 0; this.panelId = null; this.feed = null;
     this.build();
     this.loadLayers();
     if (this.mode !== "map") setTimeout(() => this.setMode(this.mode), 0);
@@ -57,6 +61,8 @@ export class Graph {
       seg("Layout", [["force", "force"], ["lanes", "seat lanes"]], this.layout, (v) => { this.layout = v; this.ui.store.set("graphLayout", v); this.relayout(); }),
       seg("Group", [["tree", "by seat"], ["work", "by work item"], ["repo", "by repo"]], this.view, (v) => { this.view = v; this.ui.store.set("graphView", v); this.renderBar(); this.relayout(); }),
     ];
+    this.fresh = h("span", { class: "hint g-fresh", role: "status", "aria-live": "off" });
+    this.freshTimer = setInterval(() => this.renderFresh(), 1000);
     this.ctx = this.canvas.getContext("2d");
     this.mctx = this.mini.getContext("2d");
     new ResizeObserver(() => this.resize()).observe(this.stage);
@@ -70,19 +76,23 @@ export class Graph {
     if (v === "map") { this.relayout(); this.resize(); } else renderMode(this.vw, v, this);
   }
 
-  async loadLayers() {
+  async loadLayers(force = false) {
+    clearTimeout(this.layerTimer);
+    this.layerTimer = setTimeout(() => this.loadLayers(), 60000);
+    if (this.root.closest("[hidden]")) return;           // another page is showing: no gh/db work for a map nobody sees
     try {
       if (this.layers.has("files")) this.hot = (await get("gx/hot?window=" + (this.ui.store.get("hotWindow", 86400)))).files || [];
       if (this.layers.has("prs")) this.prs = (await get("gx/prs")).prs || [];
     } catch (e) { toast(`Layer not loaded: ${e.message}`); }
-    if (this.mode === "map") this.relayout();
-    clearTimeout(this.layerTimer);
-    this.layerTimer = setTimeout(() => this.loadLayers(), 60000);
+    // the minute refresh redraws only when the layers changed (a relayout reheats the map); a toggle always redraws
+    const sig = JSON.stringify([this.hot.map((f) => f.path + f.n_sessions), this.prs.map((p) => p.url + p.state + p.session_id)]);
+    if (this.mode === "map" && (force || sig !== this._layerSig)) this.relayout();
+    this._layerSig = sig;
   }
   toggleLayer(k) {
     this.layers.has(k) ? this.layers.delete(k) : this.layers.add(k);
     this.ui.store.set("graphLayers", [...this.layers]);
-    this.renderBar(); this.loadLayers();
+    this.renderBar(); this.loadLayers(true);
   }
   async searchAll(q) {
     q = (q || "").trim();
@@ -99,6 +109,21 @@ export class Graph {
   pin(item) { this.pins.set(item.path, { ...item, fromSearch: false }); this.relayout(); toast(`${item.label} pinned to the graph`); }
   unpin(path) { this.pins.delete(path); this.relayout(); }
   newChat(opts = {}) { this.ui.spawn(opts); }
+
+  // How old is what is on screen. The feed keeps the last good value when the server cannot be reached, and the
+  // collector's own snapshot can lag behind a healthy server: either way the map says so instead of looking live.
+  setFeed(feed) { this.feed = feed; this.renderFresh(); }
+  renderFresh() {
+    if (!this.feed || !this.data) { this.fresh.textContent = ""; return; }
+    const now = Date.now(), okAge = this.feed.okAt ? (now - this.feed.okAt) / 1000 : null;
+    const snapAge = this.data.snapshot_at ? now / 1000 - this.data.snapshot_at : null;
+    let txt, bad = false;
+    if (this.feed.error && okAge != null && okAge > 12) { txt = `offline: showing data from ${age(okAge)} ago (${this.feed.error.message})`; bad = true; }
+    else if (snapAge != null && snapAge > STALE_S) { txt = `server snapshot is ${age(snapAge)} old`; bad = true; }
+    else txt = okAge == null ? "loading" : `live, updated ${okAge < 5 ? "just now" : age(okAge) + " ago"}`;
+    if (this.fresh.textContent !== txt) this.fresh.textContent = txt;
+    this.fresh.classList.toggle("g-stale", bad);
+  }
 
   renderBar() {
     if (this.mode !== "map") {
@@ -120,6 +145,10 @@ export class Graph {
     const row = (cls, ...kids) => h("div", { class: "g-row " + cls }, ...kids);
     this.bar.replaceChildren(...[row("g-row-views", this.modeSeg(), ...this.segs(),
       h("div", { class: "g-filters", role: "group", "aria-label": "Layers" }, layer("files", "hot files"), layer("prs", "PRs"),
+        (this.showEnded || this.hiddenEnded > 0) && h("button", { class: "chip toggle", "aria-pressed": String(this.showEnded),
+          title: `Chats whose process is gone and that were last active over ${ENDED_KEEP_S / 3600} hours ago`,
+          onclick: () => { this.showEnded = !this.showEnded; this.ui.store.set("graphEnded", this.showEnded); this.renderBar(); this.relayout(); } },
+          this.showEnded ? "ended chats" : `ended chats (${this.hiddenEnded} hidden)`),
         this.pins.size > 0 && h("button", { class: "chip toggle", onclick: () => { this.pins.clear(); this.relayout(); this.renderBar(); } }, `clear ${this.pins.size} pinned`))),
       row("g-row-search", sq, this.hl && h("button", { class: "btn ghost", onclick: () => { this.sq = ""; this.clearSearch(); } }, `Clear search (${this.hl.size})`),
         h("button", { class: "btn", onclick: () => this.newChat() }, "+ New chat")),
@@ -130,7 +159,8 @@ export class Graph {
         h("button", { class: "btn ghost", onclick: () => { this.userMoved = false; this.fit(); }, title: "Fit (0)" }, "Fit"),
         h("button", { class: "btn ghost", "aria-pressed": String(!this.table.hidden), onclick: () => this.toggleTable() }, "Table"),
         h("button", { class: "btn ghost", "aria-pressed": String(!!this.frames24), onclick: () => this.toggleReplay() }, "Replay"),
-        h("span", { class: "hint g-legend" }, "color = state, size = spend today, red ring = needs you, dashed = unknown; squares = files, hexagons = PRs")),
+        this.fresh,
+        h("span", { class: "hint g-legend" }, "color = state, size = spend today, red ring = needs you, dashed = unknown; squares = subagents and files, hexagons = PRs")),
       // seat and state chips stay folded behind Filters (with a count when any is on) so the bar is two lines, not four
       this.showFilters && row("g-row-filters", h("div", { class: "g-filters", role: "group", "aria-label": "Seats" }, seats.map((s) => chip(this.filters.seats, s, s))),
         h("div", { class: "g-filters", role: "group", "aria-label": "States" }, STATES.map((s) => chip(this.filters.states, s, s.replace("_", " ")))),
@@ -151,7 +181,10 @@ export class Graph {
   // ------------------------------------------------------------------ B10 day replay
   async toggleReplay() {
     if (this.frames24) { this.stopPlay(); this.frames24 = null; this.replay = null; this.changes = new Map(); this.flash = new Set(); this.diff = null; this.renderBar(); this.relayout(); return; }
-    try { this.frames24 = (await get("graph/history?hours=24")).frames || []; }
+    try {
+      const r = await get("graph/history?hours=24&compact=1");
+      this.frames24 = r.ids ? r.frames.map((f) => ({ at: f.at, nodes: f.nodes.map((n) => [r.ids[n[0]], n[1], n[2]]) })) : r.frames || [];
+    }
     catch (e) { toast(`No history: ${e.message}`); return; }
     if (!this.frames24.length) { this.frames24 = null; toast("No history yet: frames are recorded once a minute"); return; }
     this.setFrame(this.frames24.length - 1);
@@ -214,9 +247,14 @@ export class Graph {
   // ------------------------------------------------------------------ data -> visible model
   update(data) {
     const first = !this.data;
-    this.data = data;
+    // Reheat the force layout only when the picture changed (a node came, went or changed state, an edge moved).
+    // Every poll changes some chat's "final" text or activity time; reheating on those made the whole map drift.
+    const topo = topoSig(data), reheat = first || topo !== this.topo;
+    this.data = data; this.topo = topo;
     if (first || !this.bar.contains(document.activeElement)) this.renderBar();   // never rebuild under the caret
-    this.relayout(first);
+    this.relayout(first, reheat);
+    this.refreshPanel();
+    this.renderFresh();
   }
 
   model() {
@@ -232,6 +270,16 @@ export class Graph {
       if (f.q && !(n.label || "").toLowerCase().includes(f.q) && n.type !== "seat" && n.type !== "work_item") return false;
       return true;
     });
+    // A chat whose process is gone and that was last active long ago is history, not a node (the Ended chats chip brings
+    // them back); a chat that needs you or matches the search always stays.
+    this.hiddenEnded = 0;
+    if (!this.showEnded && !this.replay) {
+      const cut = Date.now() / 1000 - ENDED_KEEP_S;
+      nodes = nodes.filter((n) => {
+        if (n.type === "session" && n.state === "stopped" && !n.needs_you && (n.activity || 0) < cut && !(this.hl && this.hl.has(n.session_id))) { this.hiddenEnded++; return false; }
+        return true;
+      });
+    }
     // idle clusters: per seat (tree) or per work item (work), 2+ idle sessions fold into one node
     const groupOf = (n) => (this.view === "tree" ? `seat:${n.seat}` : this.view === "repo" ? `repo:${n.repo || "unknown"}` : n.parent || "none");
     const extra = [];
@@ -330,15 +378,17 @@ export class Graph {
     return { nodes, edges, byId: new Map(nodes.map((n) => [n.id, n])) };
   }
 
-  relayout(first) {
+  relayout(first, reheat = true) {
     this.m = this.model();
     const W = this.W || 1000, H = this.H || 700;
     for (const n of this.m.nodes) if (!this.pos.has(n.id)) {
-      const p = n.parent && this.pos.get(n.parent);
+      const p = (n.parent && this.pos.get(n.parent)) || (n.seat && this.pos.get("seat:" + n.seat));   // a new chat appears next to its seat
       this.pos.set(n.id, { x: (p ? p.x : W / 2) + (Math.random() - 0.5) * 80, y: (p ? p.y : H / 2) + (Math.random() - 0.5) * 80, vx: 0, vy: 0 });
     }
+    if (this.pos.size > this.m.nodes.length * 3 + 60) for (const id of [...this.pos.keys()]) if (!this.m.byId.has(id)) this.pos.delete(id);   // gone nodes
     if (this.layout === "lanes") this.lanes();
-    this.alpha = this.layout === "force" ? Math.max(this.alpha, first ? 1 : 0.35) : 0.6;
+    if (reheat) this.alpha = this.layout === "force" ? Math.max(this.alpha, first ? 1 : 0.35) : 0.6;
+    if (this._hid !== this.hiddenEnded) { this._hid = this.hiddenEnded; if (!this.bar.contains(document.activeElement)) this.renderBar(); }
     if (!this.table.hidden) this.renderTable();
     this.kick();
     if (first) this.autoFit = true;
@@ -349,14 +399,16 @@ export class Graph {
     const seats = this.m.nodes.filter((n) => n.type === "seat");
     const wis = this.m.nodes.filter((n) => n.type === "work_item");
     const laneW = 170, x0 = wis.length ? 220 : 60;
-    const laneOf = new Map(seats.map((s, i) => [s.seat, i]));
+    // the work and repo views have no seat boxes: the lanes are then the seats the chats run on
+    const laneKeys = seats.length ? seats.map((s) => s.seat) : [...new Set(this.m.nodes.filter((n) => n.type === "session" || n.type === "cluster").map((n) => n.seat))].sort();
+    const laneOf = new Map(laneKeys.map((k, i) => [k, i]));
     const col = new Map();
     for (const s of seats) this.target(s.id, x0 + laneOf.get(s.seat) * laneW, 40);
     const rows = this.m.nodes.filter((n) => n.type === "session" || n.type === "cluster")
       .sort((a, b) => rank(a) - rank(b) || (b.activity || 0) - (a.activity || 0));
     const ys = new Map();
     for (const n of rows) {
-      const i = laneOf.has(n.seat) ? laneOf.get(n.seat) : seats.length;
+      const i = laneOf.has(n.seat) ? laneOf.get(n.seat) : laneKeys.length;
       const k = col.get(i) || 0;
       col.set(i, k + 1);
       const y = 110 + k * 46;
@@ -686,10 +738,14 @@ export class Graph {
       ev.preventDefault();
       this.autoFit = false; this.userMoved = true;
       const r = cv.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
-      const k = Math.max(0.25, Math.min(3, this.t.k * Math.exp(-ev.deltaY * 0.0015)));
+      const k = Math.max(0.1, Math.min(3, this.t.k * Math.exp(-ev.deltaY * 0.0015)));
       this.t.x = mx - ((mx - this.t.x) * k) / this.t.k; this.t.y = my - ((my - this.t.y) * k) / this.t.k; this.t.k = k;
       this.kick();
     }, { passive: false });
+    cv.addEventListener("dblclick", (ev) => {   // a dragged node stays where it was dropped; double-click lets the layout move it again
+      const n = this.hit(this.world(ev)), p = n && this.pos.get(n.id);
+      if (p && p.fixed) { p.fixed = false; this.alpha = Math.max(this.alpha, 0.35); this.kick(); toast(`${n.label} released`); }
+    });
     cv.addEventListener("contextmenu", (ev) => { ev.preventDefault(); const n = this.hit(this.world(ev)); if (n) this.openMenu(n, ev); });
     cv.addEventListener("keydown", (ev) => this.key(ev));
     this.mini.addEventListener("click", (ev) => {
@@ -720,10 +776,10 @@ export class Graph {
     } else if (k === "Enter" && this.focus) { ev.preventDefault(); this.open(this.m.byId.get(this.focus)); }
     else if (k === "Escape") { this.closePanel(); this.hideMenu(); }
     else if (k === "+" || k === "=") { this.t.k = Math.min(3, this.t.k * 1.2); this.kick(); }
-    else if (k === "-") { this.t.k = Math.max(0.25, this.t.k / 1.2); this.kick(); }
+    else if (k === "-") { this.t.k = Math.max(0.1, this.t.k / 1.2); this.kick(); }
     else if (k === "0") { this.userMoved = false; this.fit(); }
     else if (k === "l") { this.layout = this.layout === "force" ? "lanes" : "force"; this.renderBar(); this.relayout(); }
-    else if (k === "v") { this.view = this.view === "tree" ? "work" : "tree"; this.renderBar(); this.relayout(); }
+    else if (k === "v") { this.view = { tree: "work", work: "repo", repo: "tree" }[this.view]; this.ui.store.set("graphView", this.view); this.renderBar(); this.relayout(); }
     else if (k === "T") this.toggleTable();
     else if (k === "/") { ev.preventDefault(); this.bar.querySelector(".g-q").focus(); }
     else if (k === "ContextMenu" && this.focus) { const n = this.m.byId.get(this.focus), p = this.pos.get(n.id);
@@ -763,17 +819,20 @@ export class Graph {
     if (!n) return;
     if (n.type === "cluster") { this.expanded.add(n.group); this.relayout(); return; }
     this.tip.hidden = true;
+    this.panelId = n.id;
     const ui = this.ui, isS = n.type === "session";
     const ta = isS && !n.excluded && h("textarea", { class: "reply", rows: "3", placeholder: "Reply to this chat", "aria-label": "Reply" });
     const item = isS ? (ui.itemFor(n.session_id) || { kind: "blocked", session_id: n.session_id, key: n.key, title: n.label, excluded: n.excluded }) : null;
     const rc = n.receipt;
+    // the parts that change while the panel is open are kept, so a poll can update them in place (refreshPanel)
+    this.pd = { chip: h("span", { class: "chip g-st" }), act: n.activity ? h("p", { class: "hint g-act" }) : null, fin: n.final ? md(n.final, "final md") : null, final: n.final || "" };
+    this.paintPanel(n);
     this.panel.replaceChildren(
       h("div", { class: "g-ph" }, h("h3", {}, n.label), h("button", { class: "btn ghost", "aria-label": "Close", onclick: () => this.closePanel() }, "Close")),
-      h("div", { class: "who" }, h("span", { class: "chip" }, n.type), n.seat && h("span", { class: "chip" }, n.seat),
-        h("span", { class: "chip st-" + (n.needs_you ? "blocked" : n.state) }, n.needs_you ? "needs you" : n.state),
-        n.excluded && h("span", { class: "chip ro" }, "read-only")),
-      n.activity && h("p", { class: "hint" }, `last activity ${ct(n.activity, true)} (${age(Date.now() / 1000 - n.activity)} ago)`),
-      n.final && md(n.final, "final md"),
+      h("div", { class: "who" }, h("span", { class: "chip" }, n.type === "job" && n.agent ? "subagent" : n.type), n.seat && h("span", { class: "chip" }, n.seat),
+        this.pd.chip, n.excluded && h("span", { class: "chip ro" }, "read-only")),
+      this.pd.act, this.pd.fin,
+      n.type === "job" && this.jobPanel(n),
       rc && h("div", { class: "receipt" }, h("span", { class: "chip " + (rc.verified ? "risk-low" : "risk-med") }, rc.verified ? "verified" : "not verified"),
         h("span", { class: "chip" }, `${rc.files} files`), rc.test && h("span", { class: "testline" }, rc.test),
         (rc.prs || []).map((u) => h("a", { href: u, target: "_blank", rel: "noopener noreferrer" }, u.replace(/^https:\/\/github.com\//, "")))),
@@ -804,7 +863,34 @@ export class Graph {
     this.panel.hidden = false;
     (ta || this.panel.querySelector("button")).focus();
   }
-  closePanel() { this.panel.hidden = true; this.canvas.focus(); }
+  closePanel() { this.panel.hidden = true; this.panelId = null; this.canvas.focus(); }
+  paintPanel(n) {
+    const st = n.needs_you ? "needs you" : n.state;
+    this.pd.chip.className = "chip g-st st-" + (n.needs_you ? "blocked" : n.state);
+    if (this.pd.chip.textContent !== st) this.pd.chip.textContent = st;
+    if (this.pd.act) this.pd.act.textContent = `last activity ${ct(n.activity, true)} (${age(Date.now() / 1000 - n.activity)} ago)`;
+  }
+  // A poll updates what the open panel shows (state, last activity, the chat's last message) without rebuilding it under
+  // the person's cursor or a half-written reply, and says so when the node has ended.
+  refreshPanel() {
+    if (this.panel.hidden || !this.panelId || !this.pd) return;
+    const n = this.m && this.m.byId.get(this.panelId);
+    if (!n) {
+      if (!this.panel.querySelector(".g-gone")) this.panel.querySelector(".g-ph").after(h("p", { class: "receipt none g-gone" }, "This one has ended or left the map; what is shown is its last known state."));
+      return;
+    }
+    this.panel.querySelector(".g-gone")?.remove();
+    this.paintPanel(n);
+    if (this.pd.fin && n.final && n.final !== this.pd.final) { const nf = md(n.final, "final md"); this.pd.fin.replaceWith(nf); this.pd.fin = nf; this.pd.final = n.final; }
+  }
+  jobPanel(n) {
+    const parent = n.parent_session_id && (this.data?.nodes || []).find((x) => x.type === "session" && x.session_id === n.parent_session_id);
+    return h("div", { class: "g-job" },
+      n.agent && h("p", { class: "hint" }, "Started by ", parent ? h("a", { class: "nm", href: "#/chat/" + encodeURIComponent(parent.session_id) }, parent.label) : "a chat", "."),
+      n.tool && h("p", { class: "hint" }, `Running a ${n.tool} call.`),
+      n.state === "unknown" && n.agent && h("p", { class: "receipt none" }, "No transcript write for a while and no finish recorded: it may have died. It leaves the map after 30 minutes of silence."),
+      !n.agent && h("p", { class: "hint" }, "Fleet job (mailbox status). A job with no update for 6 hours reads unknown."));
+  }
 
   sessionList(sids) {
     const by = new Map((this.data?.nodes || []).filter((x) => x.type === "session").map((x) => [x.session_id, x]));
@@ -860,7 +946,7 @@ export class Graph {
   }
   renderTable() {
     const rows = this.m.nodes.slice().sort((a, b) => rank(a) - rank(b));
-    this.table.replaceChildren(h("table", {}, h("caption", {}, `${rows.length} nodes (${this.view === "tree" ? "agent tree" : "work graph"})`),
+    this.table.replaceChildren(h("table", {}, h("caption", {}, `${rows.length} nodes (${{ tree: "by seat", work: "by work item", repo: "by repo" }[this.view]})`),
       h("thead", {}, h("tr", {}, ["Type", "Name", "State", "Seat", "Spend today", "Links"].map((x) => h("th", { scope: "col" }, x)))),
       h("tbody", {}, rows.map((n) => h("tr", {}, h("td", {}, n.type), h("td", {}, h("button", { class: "linkish", onclick: () => this.open(n) }, n.label)),
         h("td", {}, n.needs_you ? "needs you" : n.state), h("td", {}, n.seat || ""), h("td", { class: "num" }, n.spend ? Math.round(n.spend).toLocaleString() : ""),
@@ -878,6 +964,9 @@ function radius(n, max) {
   if (n.type === "job") return 4;
   if (n.type === "cluster") return 9 + Math.min(10, n.members.length);
   return 5 + 11 * Math.sqrt((n.spend || 0) / max);
+}
+function topoSig(d) {
+  return d.nodes.map((n) => `${n.id}:${n.state}${n.needs_you ? "!" : ""}${n.limited ? "L" : ""}`).join("|") + "#" + d.edges.length;
 }
 function rank(n) { return n.needs_you ? 0 : n.state === "working" ? 1 : n.type === "cluster" ? 3 : n.state === "idle" ? 2 : 4; }
 let LBL_MAX = 34;

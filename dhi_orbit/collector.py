@@ -128,7 +128,7 @@ class Collector:
         self._meter_last: dict[str, dict] = {}
         self._meter_hist: dict[str, list] = {}
         self._live_next: dict[str, float] = {}
-        self._pr_cache: dict[str, tuple] = {}
+        self._pr_cache: dict[str, tuple] = self._load_pr_cache()
         self._pr_busy = False
 
     def _transcript(self, path: str) -> Transcript:
@@ -321,24 +321,63 @@ class Collector:
         return rows
 
     # ------------------------------------------------------------ PR state
+    # How long a PR answer is trusted before gh is asked again. merged and closed rarely change (a day); a PR gh says does
+    # not exist (a placeholder link in a chat, a deleted repo) is "missing" and is not drawn; a failed or timed-out call
+    # is retried soon and stays "unknown", which the graph words as "not read yet", never as a state.
+    PR_TTL = {"open": 900, "merged": 86400, "closed": 86400, "missing": 6 * 3600, None: 120}
+
+    @staticmethod
+    def _pr_file() -> str:
+        return os.path.join(config.home(), "pr_cache.json")
+
+    def _load_pr_cache(self) -> dict[str, tuple]:
+        """The last answers survive a restart: every PR used to read "unknown" for minutes after one."""
+        try:
+            return {u: (float(t), st) for u, (t, st) in json.load(open(self._pr_file())).items()}
+        except (OSError, ValueError, TypeError):
+            return {}
+
+    def _save_pr_cache(self) -> None:
+        try:
+            os.makedirs(config.home(), exist_ok=True)
+            tmp = self._pr_file() + ".tmp"
+            json.dump({u: [t, st] for u, (t, st) in self._pr_cache.items()}, open(tmp, "w"))
+            os.replace(tmp, self._pr_file())
+        except OSError:
+            pass
+
     def pr_states(self, urls: list[str]) -> dict[str, str]:
-        """open / merged / closed per PR url via `gh`, cached 15 min, fetched in a background thread."""
+        """open / merged / closed / missing per PR url via `gh`, fetched in a background thread (see PR_TTL)."""
         now = time.time()
-        todo = [u for u in urls if now - self._pr_cache.get(u, (0, None))[0] > 900]
+        todo = [u for u in urls if u not in self._pr_cache or now - self._pr_cache[u][0] > self.PR_TTL.get(self._pr_cache[u][1], 900)]
         if todo and not self._pr_busy:
             self._pr_busy = True
             threading.Thread(target=self._fetch_prs, args=(todo,), daemon=True).start()
         return {u: self._pr_cache[u][1] for u in urls if u in self._pr_cache and self._pr_cache[u][1]}
 
-    def _fetch_prs(self, urls: list[str]) -> None:
+    @staticmethod
+    def _gh_state(u: str) -> str | None:
         try:
-            for u in urls:
-                try:
-                    p = subprocess.run(["gh", "pr", "view", u, "--json", "state", "-q", ".state"],
-                                       capture_output=True, text=True, timeout=20)
-                    st = p.stdout.strip().lower() or None
-                except (OSError, subprocess.TimeoutExpired):
-                    st = None
-                self._pr_cache[u] = (time.time(), st)
+            p = subprocess.run(["gh", "pr", "view", u, "--json", "state", "-q", ".state"],
+                               capture_output=True, text=True, timeout=20)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        out = p.stdout.strip().lower()
+        if out in ("open", "merged", "closed"):
+            return out
+        if "could not resolve" in (p.stdout + p.stderr).lower():
+            return "missing"                   # gh answered: no such repository or pull request
+        return None                            # not an answer (auth, network, rate limit): try again soon
+
+    def _fetch_prs(self, urls: list[str]) -> None:
+        # six gh calls at a time: 116 PRs took about 2 minutes one by one, so every PR read "unknown" that long after a restart
+        from concurrent.futures import ThreadPoolExecutor
+        try:
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                for i, (u, st) in enumerate(zip(urls, pool.map(self._gh_state, urls)), 1):
+                    self._pr_cache[u] = (time.time(), st)
+                    if i % 20 == 0:
+                        self._save_pr_cache()
+            self._save_pr_cache()
         finally:
             self._pr_busy = False

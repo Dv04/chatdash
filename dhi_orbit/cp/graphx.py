@@ -210,7 +210,8 @@ def prs(snap: dict, col, sessions: list[str] | None = None) -> list[dict]:
             states = col.pr_states(sorted({r["url"] for r in rows}))
         except Exception:
             states = {}
-    return [dict(r, state=states.get(r["url"]) or "unknown") for r in rows]
+    # "missing" = gh says the PR does not exist (a placeholder or example link in a chat): not a node, not a row
+    return [dict(r, state=states.get(r["url"]) or "unknown") for r in rows if states.get(r["url"]) != "missing"]
 
 
 def outcomes(snap: dict, col, days: int = 7) -> dict:

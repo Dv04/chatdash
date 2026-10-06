@@ -67,6 +67,35 @@ export function initNebula(ui) {
   addEventListener("touchmove", (e) => { if (touchY != null) setPull((e.touches[0].clientY - touchY) * 1.3); }, { passive: true });
   addEventListener("touchend", () => { if (touchY == null) return; touchY = null; if (pull >= PULL * 0.6) dive(); else setPull(0); }, { passive: true });
 
+  // And back out: the mirror of the dive. In Sky, keep scrolling down (or swipe up on a phone) and the board comes
+  // back. The seat panel and the question dialog scroll themselves, so a gesture that starts in them never counts.
+  let back = 0, backIdle = null, backY = null, leaving = false;
+  const setBack = (v) => {
+    back = Math.max(0, Math.min(PULL, v));
+    root.style.setProperty("--nb-back", (back / PULL).toFixed(3));
+    root.classList.toggle("nb-backing", back > 0);
+  };
+  const inSky = (t) => root.dataset.look === "nebula" && ui.route() === "sky" && !leaving
+    && !(t && t.closest && t.closest("input, textarea, select, dialog, .pop, .sky-panel, .sky-ask"));
+  const surface = () => {
+    leaving = true;
+    clearTimeout(backIdle);
+    root.classList.add("nb-surface");
+    setTimeout(() => { location.hash = "#/"; root.classList.remove("nb-surface"); setBack(0); leaving = false; },
+      matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 420);
+  };
+  addEventListener("wheel", (e) => {
+    if (e.deltaY <= 0 || e.ctrlKey || Math.abs(e.deltaX) > e.deltaY || !inSky(e.target)) { if (back && !leaving) setBack(0); return; }
+    setBack(back + e.deltaY * 0.6);
+    clearTimeout(backIdle);
+    if (back >= PULL) surface(); else backIdle = setTimeout(() => setBack(0), 350);
+  }, { passive: true });
+  addEventListener("touchstart", (e) => { backY = e.touches.length === 1 && inSky(e.target) ? e.touches[0].clientY : null; }, { passive: true });
+  addEventListener("touchmove", (e) => { if (backY != null && !leaving) setBack((backY - e.touches[0].clientY) * 1.3); }, { passive: true });
+  const backEnd = () => { if (backY == null) return; backY = null; if (leaving) return; if (back >= PULL * 0.6) surface(); else setBack(0); };
+  addEventListener("touchend", backEnd, { passive: true });
+  addEventListener("touchcancel", backEnd, { passive: true });
+
   const capsule = h("nav", { class: "nb-capsule", "aria-label": "Views" },
     [["#/sky", "sky", "Sky"], ["#/", "board", "Board"], ["#/graph", "graph", "Graph"], ["#/sessions", "chats", "Chats"], ["#/settings", "settings", "Settings"]]
       .map(([href, id, label]) => h("a", { href, dataset: { view: id } }, glyph(id), h("span", {}, label))));

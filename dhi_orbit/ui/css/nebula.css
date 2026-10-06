@@ -643,3 +643,11 @@ a.sky-go b { color: var(--nb-need-dot, var(--ink)); }
   transition: transform .42s cubic-bezier(.55, 0, .8, .2), opacity .42s ease-in; }
 :root[data-look="nebula"][data-view="board"].nb-dive :is(.shell, .nb-band, .nb-orn) { transform: translateY(90px); opacity: 0; transition: transform .35s ease-in, opacity .3s ease-in; }
 @media (pointer: coarse) { :root[data-look="nebula"][data-view="board"] .nb-band::after { content: "Pull down to fly into Sky"; } }
+
+/* and back out (js/nebula.js): in Sky, scrolling down (swiping up on a phone) lifts the view away and returns to the board */
+:root[data-look="nebula"][data-view="sky"].nb-backing .skyview { transform: translateY(calc(var(--nb-back, 0) * -44px)) scale(calc(1 - var(--nb-back, 0) * 0.05)); opacity: calc(1 - var(--nb-back, 0) * 0.4); }
+:root[data-look="nebula"][data-view="sky"] .skyview::after { content: "Keep scrolling down to return to the board"; position: absolute; left: 50%; bottom: 84px; translate: -50% 0;
+  font-size: var(--t-xs); letter-spacing: .08em; color: var(--nb-label-2); opacity: 0; pointer-events: none; white-space: nowrap; }
+:root[data-look="nebula"][data-view="sky"].nb-backing .skyview::after { opacity: min(1, calc(var(--nb-back, 0) * 2.5)); }
+:root[data-look="nebula"][data-view="sky"].nb-surface .skyview { transform: translateY(-80px) scale(.92); opacity: 0; transition: transform .35s ease-in, opacity .3s ease-in; }
+@media (pointer: coarse) { :root[data-look="nebula"][data-view="sky"] .skyview::after { content: "Swipe up to return to the board"; } }

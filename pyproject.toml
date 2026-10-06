@@ -32,7 +32,7 @@ chatdash-stop-hook = "dhi_orbit.cp.hooks.stop_hook:cli"
 chatdash-statusline = "dhi_orbit.statusline:main"
 
 [tool.setuptools]
-packages = ["dhi_orbit", "dhi_orbit.cp", "dhi_orbit.cp.hooks"]
+packages = ["dhi_orbit", "dhi_orbit.cp", "dhi_orbit.cp.hooks", "chatdash", "chatdash.cp", "chatdash.cp.hooks"]
 
 [tool.setuptools.package-data]
 dhi_orbit = ["ui/*", "ui/js/*", "ui/css/*", "static/*"]

@@ -55,10 +55,10 @@ access token inside it (`.token`, mode 600). The page gets the token injected wh
 DHI Orbit is the new name of chatdash. The `chatdash` command still works (as do `chatdash-ask-hook`,
 `chatdash-stop-hook` and `chatdash-statusline`), an existing `~/.config/chatdash` data directory (with its
 `chatdash.db`) keeps being used, and the `CHATDASH_*` environment variables are still read; the `DHI_ORBIT_*`
-name wins when both are set. A status line meter that chatdash installed is recognised and is rewritten to the new
-command the next time you turn usage on for that account. Two things do not carry over by themselves: the
-`launchd_prefix` default is now `com.dhi.orbit` (set it to `com.chatdash` in `config.json` to keep managing
-existing `com.chatdash.*` jobs), and Python imports are now `dhi_orbit`.
+name wins when both are set. A status line meter or hook that chatdash installed keeps running (a small
+`chatdash` module forwards to DHI Orbit) and the meter is rewritten to the new command the next time you turn
+usage on for that account. While the old data directory is in use, the Schedules panel keeps managing your
+`com.chatdash.*` launchd jobs; new installs use `com.dhi.orbit`. Python imports are now `dhi_orbit`.
 
 ## Connect your accounts
 

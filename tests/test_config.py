@@ -223,3 +223,10 @@ def test_static_page_takes_the_public_url_from_config_not_from_the_source():
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     page = open(os.path.join(here, "dhi_orbit", "static", "index.html"), encoding="utf-8").read()
     assert 'const PUBLIC_URL="__PUBLIC_URL__"' in page and 'value="https://' not in page
+
+
+def test_launchd_prefix_follows_legacy_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("DHI_ORBIT_HOME", str(tmp_path / "chatdash"))
+    assert config.launchd_prefix() == "com.chatdash"
+    monkeypatch.setenv("DHI_ORBIT_HOME", str(tmp_path / "dhi-orbit"))
+    assert config.launchd_prefix() == "com.dhi.orbit"

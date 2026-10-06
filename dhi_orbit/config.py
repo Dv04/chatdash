@@ -14,7 +14,7 @@ config.json (every key optional; a missing or unreadable file means the defaults
                                that work item, e.g. "PROJ-\\d+".
     evidence_gate_work_items   [] work item ids whose chats get the evidence gate switched on by default.
     default_cwd                "" (default: your home directory) folder for chats started from the board.
-    launchd_prefix             "com.dhi.orbit" label prefix of the launchd jobs the Schedules panel manages.
+    launchd_prefix             "" (com.dhi.orbit; com.chatdash on an old chatdash data dir) label prefix of the launchd jobs the Schedules panel manages.
     timezone                   "" (default: this computer's time zone) IANA name used to show clock times.
     meter_log                  "" (default: <data dir>/meter.log) file your status line appends rate limits to.
     plugins                    {} optional helpers, see plugin().
@@ -37,7 +37,7 @@ DEFAULTS = {
     "work_item_pattern": "",
     "evidence_gate_work_items": [],
     "default_cwd": "",
-    "launchd_prefix": "com.dhi.orbit",
+    "launchd_prefix": "",          # empty: com.dhi.orbit, or com.chatdash while the old data dir is in use
     "timezone": "",
     "meter_log": "",
     "plugins": {},
@@ -177,8 +177,10 @@ def default_cwd() -> str:
 
 
 def launchd_prefix() -> str:
-    p = str(get("launchd_prefix") or "com.dhi.orbit")
-    return p if re.fullmatch(r"[A-Za-z0-9][\w.-]*", p) else "com.dhi.orbit"
+    # an install still on the old chatdash data dir keeps managing its com.chatdash jobs
+    dflt = "com.chatdash" if os.path.basename(home()) == "chatdash" else "com.dhi.orbit"
+    p = str(get("launchd_prefix") or dflt)
+    return p if re.fullmatch(r"[A-Za-z0-9][\w.-]*", p) else dflt
 
 
 def claude_bin() -> str:

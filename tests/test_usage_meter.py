@@ -183,3 +183,15 @@ def test_the_new_saved_file_wins_over_a_stale_legacy_one_and_new_wraps_use_the_n
     assert os.path.exists(os.path.join(d, usage_meter.SAVED)) and usage_meter.saved_command(d) == "echo mine"
     assert usage_meter.turn_off(d)["restored"] and settings(d)["statusLine"]["command"] == "echo mine"
     assert not os.path.exists(os.path.join(d, usage_meter.SAVED))
+
+
+def test_legacy_statusline_module_still_runs(tmp_path):
+    # a status line written by chatdash runs `python -m chatdash.statusline`; the shim must forward it
+    import subprocess
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    doc = json.dumps({"model": {"display_name": "M"}, "rate_limits": {"five_hour": {"used_percentage": 7}}})
+    env = dict(os.environ, CHATDASH_HOME=str(tmp_path), DHI_ORBIT_HOME="", PYTHONPATH=root,
+               CLAUDE_CONFIG_DIR=str(tmp_path / "acct"))
+    r = subprocess.run([sys.executable, "-m", "chatdash.statusline"], input=doc.encode(), env=env, capture_output=True, timeout=30)
+    assert r.returncode == 0 and b"5h 7%" in r.stdout
+    assert (tmp_path / "meter.log").exists()

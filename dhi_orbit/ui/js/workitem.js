@@ -1,5 +1,6 @@
 // B6 work item page (#/work/<id>) and the proposals list (Apply / Skip cards with a diff).
 import { h, ct, age, toast } from "./lib.js";
+import { seatsAtLimit, limitWord } from "./limits.js";
 import { get, post, put } from "./api.js";
 
 export function diffView(text) {
@@ -109,7 +110,7 @@ export async function renderWorkItem(el, id, ui) {
         props.length > 0 && h("ol", { class: "strips" }, props.map((p) => proposalCard({ ...p, proposal_kind: p.kind, title: "Proposed update" }, () => renderWorkItem(el, id, ui))))),
       h("div", { class: "wi-side" },
         h("section", { class: "group" }, h("h3", {}, "Sessions", h("span", { class: "n" }, String((w.sessions || []).length))),
-          h("ul", { class: "sess" }, (w.sessions || []).map((s) => h("li", {}, h("span", { class: "st " + s.state, "aria-hidden": "true" }),
+          h("ul", { class: "sess" }, (w.sessions || []).map((s) => h("li", {}, h("span", { class: "st " + (limitWord(s, seatsAtLimit(ui.overview && ui.overview(), ui.graphData && ui.graphData())) ? "limited" : s.state), "aria-hidden": "true" }),
             h("span", { class: "nm" }, s.name), h("span", { class: "rt" }, `${s.seat}, ${s.activity ? age(Date.now() / 1000 - s.activity) + " ago" : ""}`))))),
         h("section", { class: "group" }, h("h3", {}, "Timeline"), h("ol", { class: "timeline" }, tl.length ? tl : h("li", { class: "hint" }, "No receipts, decisions or finals yet"))))));
 }

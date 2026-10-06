@@ -20,7 +20,7 @@ print("---")
 print(("Data OK" if ok else "Data UNKNOWN: " + "; ".join(d.get("health_reasons", [])[:2])) + " | color=gray")
 for x in sorted(d.get("needs_you", []), key=lambda x: x.get("since") or 0)[:12]:
     t = (x.get("title") or "")[:60].replace("|", "/")
-    href = f"http://127.0.0.1:{port}/v2/#/decision/{x.get('decision_id')}" if x.get("decision_id") else f"http://127.0.0.1:{port}/v2/"
+    href = f"http://127.0.0.1:{port}/#/decision/{x.get('decision_id')}" if x.get("decision_id") else f"http://127.0.0.1:{port}/"
     print(f"{t} ({x.get('kind')}) | href={href}")
-print(f"Open mission board | href=http://127.0.0.1:{port}/v2/")
+print(f"Open mission board | href=http://127.0.0.1:{port}/")
 PY

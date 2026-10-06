@@ -3,6 +3,7 @@
 // ring = needs you. Layouts: force, seat swimlanes. Views: agent tree (runs_on, spawned_by) and work
 // graph (belongs_to, collides_with, waits_on). Idle sessions cluster into "N idle" until expanded.
 import { h, ct, age, toast } from "./lib.js";
+import { seatsAtLimit, limitWord } from "./limits.js";
 import { get } from "./api.js";
 import { micFor } from "./dictate.js";
 import { renderMode, MODES, filesBrowser } from "./gx.js";
@@ -899,8 +900,9 @@ export class Graph {
   }
   closePanel() { this.panel.hidden = true; this.panelId = null; this.canvas.focus(); }
   paintPanel(n) {
-    const st = n.needs_you ? "needs you" : n.state;
-    this.pd.chip.className = "chip g-st st-" + (n.needs_you ? "blocked" : n.state);
+    const lw = limitWord(n, seatsAtLimit(null, this.data));
+    const st = lw || (n.needs_you ? "needs you" : n.state);
+    this.pd.chip.className = "chip g-st " + (lw ? "st-near" : "st-" + (n.needs_you ? "blocked" : n.state));
     if (this.pd.chip.textContent !== st) this.pd.chip.textContent = st;
     if (this.pd.act) this.pd.act.textContent = `last activity ${ct(n.activity, true)} (${age(Date.now() / 1000 - n.activity)} ago)`;
   }
@@ -928,10 +930,10 @@ export class Graph {
 
   sessionList(sids) {
     const by = new Map((this.data?.nodes || []).filter((x) => x.type === "session").map((x) => [x.session_id, x]));
-    const known = (sids || []).map((sid) => by.get(sid)).filter(Boolean);
+    const known = (sids || []).map((sid) => by.get(sid)).filter(Boolean), atLimit = seatsAtLimit(null, this.data);
     const other = (sids || []).length - known.length;
     return h("div", { class: "g-sl" }, h("div", { class: "hint" }, `Touched by ${(sids || []).length} chat${(sids || []).length === 1 ? "" : "s"}`),
-      h("ul", { class: "sess" }, known.map((x) => h("li", {}, h("span", { class: "st " + (x.needs_you ? "needs_you" : x.state), "aria-hidden": "true" }),
+      h("ul", { class: "sess" }, known.map((x) => h("li", {}, h("span", { class: "st " + (limitWord(x, atLimit) ? "limited" : x.needs_you ? "needs_you" : x.state), "aria-hidden": "true" }),
         h("a", { class: "nm", href: "#/chat/" + encodeURIComponent(x.session_id) }, x.label), h("span", { class: "rt" }, x.seat)))),
       other > 0 && h("p", { class: "hint" }, `${other} older chat${other === 1 ? "" : "s"} not in view`));
   }

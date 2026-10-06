@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """DHI Orbit: one local page for every Claude chat across all config dirs.
 
-    dhi-orbit                                 # http://127.0.0.1:8787/v2/   (also `orbit`; `chatdash` still works)
+    dhi-orbit                                 # http://127.0.0.1:8787/      (also `orbit`; `chatdash` still works)
     dhi-orbit --port 8790 --window-hours 48
 
 Viewing costs zero model tokens (files only). A reply is one normal turn in that chat.
@@ -22,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import _plat, actions, collector, config, keepwarm, panels
 from .index import Index
-from .cp import mount as cp_mount  # DHI Orbit v2 control plane: /v2/ and /api/cp/
+from .cp import mount as cp_mount  # DHI Orbit dashboard and control plane: / (also /v2/) and /api/cp/
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -341,7 +341,7 @@ def make_handler(st: State, token: str, port: int):
             if cp_mount.route(self, "GET", token):
                 return
             p = u.path
-            if p == "/":
+            if p == "/classic":                     # the first-generation page, no longer linked from the dashboard
                 return self._send(200, page.replace("__TOKEN__", token), "text/html; charset=utf-8")
             if p == "/api/state":
                 return self._send(200, {"version": st.version, "chats": st.chats, "seats": st.seats,
@@ -520,7 +520,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         prog="dhi-orbit",
         description="A local dashboard for every Claude Code chat across your config dirs. "
-                    "Serves http://127.0.0.1:<port>/v2/ (loopback only; the access token is in the data dir).",
+                    "Serves http://127.0.0.1:<port>/ (loopback only; the access token is in the data dir).",
         epilog="Data dir: $DHI_ORBIT_HOME or ~/.config/dhi-orbit (token, database, config.json).")
     ap.add_argument("--port", type=int, default=8787)
     ap.add_argument("--window-hours", type=float, default=24)
@@ -540,7 +540,7 @@ def main() -> None:
     threading.Thread(target=st.loop, args=(a.every,), daemon=True).start()
     ThreadingHTTPServer.request_queue_size = 128   # the default of 5 resets a browser's parallel module fetches
     srv = QuietServer(("127.0.0.1", a.port), make_handler(st, token, a.port))
-    print(f"DHI Orbit on http://127.0.0.1:{a.port}/v2/  ({len(st.chats)} chats, data dir {config.home()})", flush=True)
+    print(f"DHI Orbit on http://127.0.0.1:{a.port}/  ({len(st.chats)} chats, data dir {config.home()})", flush=True)
     srv.serve_forever()
 
 

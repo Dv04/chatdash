@@ -1,5 +1,6 @@
 // Mission board (B1): status rail, NEEDS YOU strips, work items and sessions.
 import { h, icon, age, ageParts, ct, store, toast, noReading } from "./lib.js";
+import { seatsAtLimit, limitWord } from "./limits.js";
 import { md } from "./md.js";
 import { post } from "./api.js";
 import { cardBody, timeoutLine, lowRiskRecommended } from "./cards.js";
@@ -73,6 +74,7 @@ async function continueOn(x, seat, ui) {
   catch (e) { toast(`Not continued: ${e.message}`); return; }
   // the original must not also resume at its reset and redo the work
   const notes = [];
+  store.set("continued", { ...store.get("continued", {}), [x.session_id]: x.since });
   if (!x.excluded) { try { await post("sessions/" + encodeURIComponent(x.session_id) + "/resume_pref", { pref: "off" }); } catch (e) { notes.push(`auto-resume not turned off: ${e.message}`); } }
   try { await post("needs/dismiss", { id: x.id, since: x.since, title: x.title }); } catch (e) { notes.push(`still listed: ${e.message}`); }
   toast((r.queued ? `Queued on ${seat}: starts when it frees` : `Continuing on ${seat}${r.job_id ? ` (job ${r.job_id})` : ""}`) + (notes.length ? `. ${notes.join("; ")}` : ""));
@@ -81,12 +83,15 @@ async function continueOn(x, seat, ui) {
 let parkedNode = null;   // {sig, el}: kept across refreshes so an open list and a chosen seat survive
 function parkedLine(parked, seats, ui) {
   // chats that hit the limit themselves are kept out of NEEDS YOU until the reset (cp/api.py), so they come from the seat's own stalled list
+  const cont = store.get("continued", {});          // chats already continued elsewhere (per browser): they leave this list until their limit changes
   const stalled = [];
-  for (const s of seats.values()) if (s.state === "blocked") for (const q of s.queued || []) if (!parked.some((x) => x.session_id === q.session_id)) stalled.push({ ...q, seat: s.seat });
+  for (const s of seats.values()) if (s.state === "blocked") for (const q of s.queued || [])
+    if (!parked.some((x) => x.session_id === q.session_id) && cont[q.session_id] !== q.resets_at)
+      stalled.push({ id: `limit:${s.seat}:${q.session_id}`, kind: "limit", session_id: q.session_id, seat: s.seat, title: q.name, since: q.resets_at, resets_at: q.resets_at });
   if (!parked.length && !stalled.length) { parkedNode = null; return null; }
   const perDay0 = (ui.pace && ui.pace.pct_per_day) || 14.3;
   const sig = JSON.stringify([parked.map((x) => [x.id, x.seat, x.title]), stalled.map((q) => [q.session_id, q.seat, q.resets_at]), [...seats.values()].map((s) => [s.seat, s.state, s.resume_at]),
-    parked.map((x) => continueSeats(x, seats, perDay0).map((c) => [c.s.seat, Math.round(c.spare ?? -999)]))]);
+    [...parked, ...stalled].map((x) => continueSeats(x, seats, perDay0).map((c) => [c.s.seat, Math.round(c.spare ?? -999)]))]);
   if (parkedNode && parkedNode.sig === sig) return parkedNode.el;
   const prev = parkedNode && parkedNode.el;
   const wasOpen = !!(prev && prev.open), picked = new Map(prev ? [...prev.querySelectorAll("select")].map((e) => [e.dataset.id, e.value]) : []);
@@ -97,7 +102,7 @@ function parkedLine(parked, seats, ui) {
     return `${s.label || seat} ${n} (${why(s)}${s.resume_at ? `, back ${ct(s.resume_at)}` : ""})`;
   });
   const perDay = (ui.pace && ui.pace.pct_per_day) || 14.3;
-  const rows = parked.map((x) => {
+  const rows = [...parked, ...stalled].map((x) => {
     const cands = continueSeats(x, seats, perDay);
     const sel = h("select", { "aria-label": `Seat to continue "${x.title}" on`, disabled: !cands.length, dataset: { id: x.id } },
       cands.length ? cands.map((c, i) => h("option", { value: c.s.seat },
@@ -107,17 +112,42 @@ function parkedLine(parked, seats, ui) {
     return h("li", {},
       h("span", { class: "t" }, x.title || "untitled"), h("span", { class: "chip" }, x.seat),
       h("span", { class: "grow" }),
+      x.resets_at && h("span", { class: "hint" }, x.resets_at > Date.now() / 1000 ? `hit its limit, resumes ${ct(x.resets_at)}` : "hit its limit, reset passed"),
       sel, h("button", { class: "btn", disabled: !cands.length, title: "Start a new chat on that seat that reads this chat's transcript and carries on. The original stops auto-resuming and leaves this list.",
         onclick: (e) => { e.currentTarget.disabled = true; continueOn(x, sel.value, ui); } }, "Continue there"));
   });
-  const hit = stalled.map((q) => h("li", {},
-    h("span", { class: "t" }, q.name || "untitled"), h("span", { class: "chip" }, q.seat),
-    h("span", { class: "grow" }),
-    h("span", { class: "hint" }, `hit its limit${q.resets_at > Date.now() / 1000 ? `, resumes ${ct(q.resets_at)}` : ", reset passed"}`)));
   const el = h("details", { class: "parked", open: wasOpen },
     h("summary", {}, `${parked.length + stalled.length} more parked until their seat frees: `, sum.join(", ")),
-    h("ul", {}, [...rows, ...hit]));
+    h("ul", {}, rows));
   parkedNode = { sig, el };
+  return el;
+}
+
+// ------------------------------------------------------------------ answer ready
+// Chats that finished a turn whose final answer you have not opened yet (the classic board's "Answer ready" column).
+// Opening a chat marks it read; "Mark read" does the same without opening; "Mark all read" clears the list.
+const snippet = (t) => (t || "").replace(/[#*`>_|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 180);
+let readyNode = null;   // {sig, el}: kept across refreshes so an open list stays open
+function readyLine(ov, ui) {
+  const list = (ov && ov.answers_ready) || [];
+  if (!list.length) { readyNode = null; return null; }
+  const sig = JSON.stringify(list.map((x) => [x.id, x.final_at]));
+  if (readyNode && readyNode.sig === sig) return readyNode.el;
+  const wasOpen = !!(readyNode && readyNode.el.open);
+  const by = new Map();
+  for (const x of list) by.set(x.seat, (by.get(x.seat) || 0) + 1);
+  const mark = async (fn) => { try { await fn(); } catch (e) { toast(`Not marked: ${e.message}`); } ui.refresh(); };
+  const rows = list.map((x) => h("li", { class: "rd" },
+    h("a", { class: "t", href: "#/chat/" + encodeURIComponent(x.session_id), title: x.title }, x.title || "untitled"),
+    h("span", { class: "chip" }, x.seat), x.work_item && h("span", { class: "chip" }, x.work_item),
+    h("span", { class: "grow" }),
+    h("span", { class: "hint" }, `${age(x.seconds)} ago`),
+    h("button", { class: "btn ghost", onclick: () => mark(() => post(`sessions/${encodeURIComponent(x.session_id)}/seen`)) }, "Mark read"),
+    h("span", { class: "rd-snip" }, snippet(x.final))));
+  const el = h("details", { class: "parked ready", open: wasOpen },
+    h("summary", {}, `${list.length} answer${list.length === 1 ? "" : "s"} ready to read: `, [...by].map(([s, n]) => `${s} ${n}`).join(", ")),
+    h("ul", {}, [h("li", {}, h("span", { class: "grow" }), h("button", { class: "btn ghost", onclick: () => mark(() => post("answers/seen_all")) }, "Mark all read")), ...rows]));
+  readyNode = { sig, el };
   return el;
 }
 
@@ -138,6 +168,7 @@ export function renderRail(el, ov, feed, ui) {
     h("span", {}, h("b", {}, c.sessions_working ?? "?"), " working"),
     h("span", {}, h("b", {}, c.sessions_idle ?? "?"), " idle"),
     h("span", {}, h("b", {}, c.limited ?? "?"), " at a limit"),
+    h("span", {}, h("b", {}, c.answers_ready ?? "?"), " ready"),
     !hl.ok && h("span", { class: "why" }, hl.reasons[0]));
   const seats = h("div", { class: "seats", role: "list", "aria-label": "Seat capacity" },
     ((ov && ov.capacity && ov.capacity.seats) || []).map(seatChip));
@@ -151,8 +182,7 @@ export function renderRail(el, ov, feed, ui) {
     h("button", { class: "btn ghost", title: "Voice: briefing, hands-free, talk (b reads the briefing)", onclick: () => voiceMenu(ui), "aria-label": "Voice" }, icon("voice"), h("span", { class: "lbl" }, "Voice")),
     h("button", { class: "btn ghost", title: "Command palette (Cmd+K)", onclick: () => ui.palette.open(), "aria-label": "Command palette" }, icon("search")),
     h("button", { class: "btn ghost", title: "Theme (t)", onclick: ui.cycleTheme, "aria-label": "Switch theme" }, icon("theme")),
-    h("button", { class: "btn ghost", title: "Keyboard (?)", onclick: ui.showKeys, "aria-label": "Keyboard shortcuts" }, icon("keys")),
-    h("a", { class: "btn ghost", href: "/", title: "The original DHI Orbit page" }, "Classic"));
+    h("button", { class: "btn ghost", title: "Keyboard (?)", onclick: ui.showKeys, "aria-label": "Keyboard shortcuts" }, icon("keys")));
   el.replaceChildren(health, h("div", { class: "headline" }, lead, counts), nav, tools, seats);
 }
 
@@ -233,7 +263,7 @@ export function renderNeeds(el, ov, ui) {
   const since = ui.review ? null : sinceLine(ov, ui.lastLooked);
   if (!items.length) {
     nodes.clear();
-    el.replaceChildren(head, since || "", parkedLine(parked, seats, ui) || "", h("div", { class: "empty" },
+    el.replaceChildren(head, since || "", parkedLine(parked, seats, ui) || "", readyLine(ov, ui) || "", h("div", { class: "empty" },
       h("h3", {}, ui.review ? "No open decisions" : "Nothing waits on you"),
       h("p", {}, "Questions from background chats, blocked jobs and stalled limits land here, urgent first. ",
         "Health above says whether that silence is measured.")));
@@ -262,7 +292,7 @@ export function renderNeeds(el, ov, ui) {
   const fk = a && a.dataset && a.dataset.fk, s0 = a && a.selectionStart, s1 = a && a.selectionEnd;
   const cur = list.children;
   if (cur.length !== els.length || els.some((e, i) => cur[i] !== e)) list.replaceChildren(...els);
-  const want = [head, since, parkedLine(parked, seats, ui), list].filter(Boolean);
+  const want = [head, since, parkedLine(parked, seats, ui), readyLine(ov, ui), list].filter(Boolean);
   for (const c of [...el.childNodes]) if (!want.includes(c)) c.remove();
   want.forEach((n, i) => { if (el.childNodes[i] !== n) el.insertBefore(n, el.childNodes[i] || null); });
   if (fk && document.activeElement !== a) {
@@ -336,22 +366,29 @@ export function receiptChips(r) {
 // ------------------------------------------------------------------ side: work items / seats
 const idleSeen = new Map();   // session id -> first time seen idle (ms)
 
-export function renderSide(el, graph, ui) {
-  const mode = ui.group;
+export function renderSide(el, graph, ui, opts = {}) {
+  const mode = ui.group, MODES = ["work item", "seat", "recent"];
   const seg = h("div", { class: "seg", role: "group", "aria-label": "Group by" },
-    ["work item", "seat"].map((m) => h("button", { "aria-pressed": String(mode === m), onclick: () => ui.setGroup(m) }, m)));
-  const head = h("div", { class: "section-head" }, h("h2", {}, "Sessions"), h("span", { class: "grow" }), seg);
+    MODES.map((m, i) => h("button", { "aria-pressed": String(mode === m), title: `Group by ${m} (key ${i + 1} while the list has focus)`, onclick: () => ui.setGroup(m) }, m)));
+  const head = h("div", { class: "section-head" }, h("h2", {}, "Sessions"), h("span", { class: "grow" }),
+    h("button", { class: "btn primary", title: "Start a new chat (pick the seat, optionally as a workflow)", onclick: () => ui.spawn({}) }, "+ New chat"), seg);
   if (!graph) { el.replaceChildren(head, h("div", { class: "skeleton" })); return; }
   // A filter that survives the 1.5 s refresh: the input node is kept, only the lists around it are rebuilt.
-  const filt = el._filt || (el._filt = h("input", { type: "search", class: "free side-filter", placeholder: "Filter chats",
-    "aria-label": "Filter chats", oninput: () => el._graph && renderSide(el, el._graph, ui) }));
-  el._graph = graph;
+  const filt = el._filt || (el._filt = h("input", { type: "search", class: "free side-filter", placeholder: "Filter chats (press / in the list)",
+    "aria-label": "Filter chats", oninput: () => el._graph && renderSide(el, el._graph, ui, el._opts) }));
+  const hadFocus = el.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.sid : null;
+  el._graph = graph; el._opts = opts;
+  if (!el._kb) { el._kb = true; el.addEventListener("keydown", (e) => listKeys(e, el, ui)); }
   const q = filt.value.trim().toLowerCase();
   const all = graph.nodes.filter((n) => n.type === "session");
   const sessions = q ? all.filter((n) => `${n.label} ${n.seat} ${n.parent || ""} ${labelOf(graph, n.parent)}`.toLowerCase().includes(q)) : all;
   const labels = Object.fromEntries(graph.nodes.filter((n) => n.type === "work_item").map((n) => [n.id, n.label]));
+  const ready = new Set((((ui.overview && ui.overview()) || {}).answers_ready || []).map((x) => x.session_id));
+  const sidOf = (s) => s.session_id || s.id.replace(/^session:[^:]+:/, "");
+  const atLimit = seatsAtLimit(null, graph);
   const groups = new Map();
-  for (const s of sessions) {
+  if (mode === "recent") groups.set("recent", [...sessions].sort((a, b) => (b.activity || 0) - (a.activity || 0)).slice(0, 40));
+  else for (const s of sessions) {
     const key = mode === "seat" ? s.seat : (s.parent || "none");
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(s);
@@ -360,23 +397,58 @@ export function renderSide(el, graph, ui) {
   for (const s of sessions) {
     if (s.state === "idle") { if (!idleSeen.has(s.id)) idleSeen.set(s.id, now); } else idleSeen.delete(s.id);
   }
-  const order = [...groups.entries()].sort((a, b) => score(b[1]) - score(a[1]) || String(a[0]).localeCompare(String(b[0])));
+  const order = [...groups.entries()].sort((a, b) => mode === "recent" ? 0 : score(b[1]) - score(a[1]) || String(a[0]).localeCompare(String(b[0])));
   const blocks = order.map(([key, list]) => {
-    const label = labels[key] && labels[key] !== key ? (labels[key].startsWith(key) ? labels[key] : `${key} ${labels[key]}`) : key;
-    const title = mode === "seat" ? key : key === "none" ? "No work item" : label.split(" - ")[0];
-    const shown = list.filter((s) => s.state !== "idle" || now - idleSeen.get(s.id) < IDLE_FOLD_SEC * 1000 || ui.expanded.has(key));
+    const title = mode === "recent" ? "Most recent" : mode === "seat" ? key : key === "none" ? "No work item" : (labels[key] || key).replace(/^([A-Za-z][A-Za-z0-9]*-\d+)\s.*/, "$1") + " " +
+      ((labels[key] || "").replace(/^[A-Za-z][A-Za-z0-9]*-\d+\s*/, "").split(" - ")[0]);
+    const shown = mode === "recent" ? list : list.filter((s) => s.state !== "idle" || now - idleSeen.get(s.id) < IDLE_FOLD_SEC * 1000 || ui.expanded.has(key) || ready.has(sidOf(s)) || sidOf(s) === opts.cur);
     const folded = list.length - shown.length;
     return h("section", { class: "group" },
       h("h3", {}, title, h("span", { class: "n" }, `${list.length}`)),
-      h("ul", { class: "sess" }, shown.sort(byState).map((s) => h("li", { title: s.final || "" },
-        h("span", { class: "st " + (s.limited ? "limited" : s.state), "aria-hidden": "true", title: s.limited ? "at a usage limit" : s.needs_you ? "needs you" : s.state }),
-        h("a", { class: "nm", href: "#/chat/" + encodeURIComponent(s.session_id || s.id.replace(/^session:[^:]+:/, "")) }, s.label, h("span", { class: "sr" }, ", ", s.limited ? "at a limit" : s.state)),
-        h("span", { class: "rt" }, mode === "seat" ? (s.parent || "").replace("work_item:", "") : s.seat)))),
+      h("ul", { class: "sess" }, (mode === "recent" ? shown : shown.sort(byState)).map((s) => {
+        const sid = sidOf(s), isReady = s.state === "idle" && !s.limited && ready.has(sid);
+        const lw = limitWord(s, atLimit);   // same rule as the header (splitNeeds parks those items), whatever the chat's own state says
+        const cls = lw ? "limited" : s.needs_you ? "needs_you" : isReady ? "ready" : s.state;
+        const word = lw || (s.needs_you ? "needs you" : isReady ? "answer ready" : s.state);
+        return h("li", { title: s.final || "" },
+          h("span", { class: "st " + cls, "aria-hidden": "true", title: word }),
+          h("a", { class: "nm", href: "#/chat/" + encodeURIComponent(sid), dataset: { sid }, "aria-current": sid === opts.cur ? "true" : "false" }, s.label, h("span", { class: "sr" }, ", ", word)),
+          h("span", { class: "rt" }, mode === "recent" ? `${s.seat}${s.activity ? ", " + age(Date.now() / 1000 - s.activity) : ""}` : mode === "seat" ? (s.parent || "").replace("work_item:", "") : s.seat));
+      })),
       folded > 0 && h("button", { class: "idle-fold", onclick: () => ui.expand(key) }, `${folded} idle`));
   });
   if (q && !blocks.length) blocks.push(h("p", { class: "hint" }, `No chat matches "${filt.value.trim()}".`));
   if (filt.parentNode !== el) el.replaceChildren(head, filt, ...blocks);
   else { for (const n of [...el.childNodes]) if (n !== filt) n.remove(); el.insertBefore(head, filt); el.append(...blocks); }
+  if (hadFocus) { const n = el.querySelector(`a.nm[data-sid="${CSS.escape(hadFocus)}"]`); if (n) n.focus({ preventScroll: true }); }   // the 1.5 s refresh rebuilds the rows: the keyboard must not lose its place
+}
+
+// Keyboard for the Sessions list (the board window and the split view): arrows or j/k move, Enter opens and focuses the reply box,
+// 1/2/3 pick the grouping, / filters, Esc leaves. In the split view the open chat follows the highlighted row.
+function listKeys(e, el, ui) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target, split = !!(el._opts && el._opts.split);
+  const rows = () => [...el.querySelectorAll("a.nm")];
+  const stop = () => { e.preventDefault(); e.stopPropagation(); };
+  const go = (d) => {
+    const r = rows(); if (!r.length) return;
+    const i = r.indexOf(t), n = r[i < 0 ? (d > 0 ? 0 : r.length - 1) : Math.max(0, Math.min(r.length - 1, i + d))];
+    n.focus(); n.scrollIntoView({ block: "nearest" });
+    if (split) ui.previewChat(n.dataset.sid);
+  };
+  if (t.matches && t.matches("input.side-filter")) {
+    if (e.key === "ArrowDown") { stop(); go(1); }
+    else if (e.key === "Escape") { e.stopPropagation(); t.value = ""; t.blur(); renderSide(el, el._graph, ui, el._opts); }
+    return;                                              // typing in the box is untouched
+  }
+  if (!t.matches || !t.matches("a.nm")) return;
+  const k = e.key;
+  if (k === "ArrowDown" || k === "j") { stop(); go(1); }
+  else if (k === "ArrowUp" || k === "k") { stop(); go(-1); }
+  else if (k === "Enter" || k === "ArrowRight") { stop(); ui.openChat(t.dataset.sid, { focus: true }); }       // into the reply box
+  else if (/^[123]$/.test(k)) { stop(); ui.setGroup(["work item", "seat", "recent"][Number(k) - 1]); setTimeout(() => ui.focusList(), 0); }
+  else if (k === "/" && el._filt) { stop(); el._filt.focus(); }
+  else if (k === "Escape") { e.stopPropagation(); if (split) location.hash = "#/"; else t.blur(); }
 }
 function labelOf(graph, id) { const n = id && graph.nodes.find((x) => x.id === id); return n ? n.label : ""; }
 

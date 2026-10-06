@@ -30,6 +30,35 @@ def tmpdb(tmp_path, monkeypatch):
     return p
 
 
+def test_settings_view_reports_the_app_version_for_bug_reports(tmpdb):
+    import dhi_orbit
+    assert api.settings_view()["app_version"] == dhi_orbit.__version__
+
+
+def test_dashboard_is_served_at_the_root_and_still_at_v2(tmpdb):
+    from dhi_orbit.cp import mount
+
+    class H:
+        def __init__(self, path):
+            self.path, self.out = path, None
+
+        def _send(self, code, body, ctype="application/json", headers=None):
+            self.out = (code, body, ctype)
+
+    def get(path):
+        h = H(path)
+        return mount.route(h, "GET", "tok"), h.out
+    for p in ("/", "/v2/"):
+        handled, (code, body, ctype) = get(p)
+        assert handled and code == 200 and b'src="js/app.js"' in body and b"__TOKEN__" not in body and ctype.startswith("text/html")
+    for p in ("/js/app.js", "/v2/js/app.js"):
+        handled, (code, body, ctype) = get(p)
+        assert handled and code == 200 and ctype.startswith("text/javascript")
+    assert get("/sw.js")[1][0] == 200 and get("/css/app.css")[1][0] == 200 and get("/manifest.webmanifest")[1][2].startswith("application/manifest")
+    assert get("/js/../../README.md")[1][0] == 404          # no way out of the ui folder
+    assert get("/api/state")[0] is False and get("/classic")[0] is False and get("/login")[0] is False   # the server's own routes are untouched
+
+
 # ------------------------------------------------------------------ banners
 def test_banner_session_same_day():
     b = limits.parse_banner("You've hit your session limit · resets 4:40pm (America/Chicago)", ct(2026, 10, 2, 13, 5))
@@ -128,6 +157,35 @@ def test_blocked_question_stays_until_answered_or_dismissed_even_if_the_chat_sto
     api.dismiss("blocked:work:j1", 200.0, "PROJ-08 papers")
     assert api.needs_you(snap(chats=[dead], jobs=[job()]), 10_000.0) == []
     assert len(api.needs_you(snap(chats=[dead], jobs=[job(updated=500.0)]), 10_000.0)) == 1   # a new block shows again
+
+
+def test_answers_ready_lists_only_idle_unread_chats(tmpdb):
+    now = time.time()
+    ok = chat(session_id="a", key="isro:a", unread=True, final="Done. Merged.", final_at="2026-10-06T20:00:00Z")
+    rows = [ok,
+            chat(session_id="b", key="isro:b", unread=False, final="read already"),                  # opened already
+            chat(session_id="c", key="isro:c", unread=True, state="working", final="mid-turn"),      # still working
+            chat(session_id="d", key="isro:d", unread=True, final=""),                                # no answer text
+            chat(session_id="e", key="isro:e", unread=True, final="x", name="cp-e2e throwaway"),     # cp's own live test
+            chat(session_id="f", key="isro:f", unread=True, final="You've hit your session limit", banner={"resets_at": 1.0})]   # a limit notice
+    ready = api.answers_ready(snap(chats=rows), now)
+    assert [r["session_id"] for r in ready] == ["a"]
+    ov = api.overview(snap(chats=rows), now)
+    assert ov["counts"]["answers_ready"] == 1 and ov["answers_ready"][0]["title"] == "PROJ-08 papers"
+
+
+def test_seen_and_unseen_routes(tmpdb):
+    marks = []
+    s = snap(chats=[chat(session_id="a", key="isro:a", unread=True, final="Done.", final_at="T1")])
+    ctx = {"seen": lambda key, final_at: marks.append((key, final_at))}
+    assert api.handle("POST", "sessions/a/seen", {}, {}, FakeSrc(s), ctx)[0] == 200
+    assert marks == [("isro:a", "T1")] and s["chats"][0]["unread"] is False
+    assert api.handle("POST", "sessions/a/unseen", {}, {}, FakeSrc(s), ctx)[0] == 200
+    assert marks[-1] == ("isro:a", "") and s["chats"][0]["unread"] is True
+    assert api.handle("POST", "sessions/nope/seen", {}, {}, FakeSrc(s), ctx)[0] == 404
+    assert api.handle("POST", "sessions/a/seen", {}, {}, FakeSrc(s), {})[0] == 501        # read-only server
+    assert api.handle("POST", "answers/seen_all", {}, {}, FakeSrc(s), ctx) == (200, {"ok": True, "marked": 1})
+    assert s["chats"][0]["unread"] is False
 
 
 def test_dismiss_route(tmpdb):
@@ -243,6 +301,40 @@ def test_graph_edges_reference_nodes(tmpdb):
     ids = {n["id"] for n in g["nodes"]}
     assert "session:work:s1" in ids and "session:work:s3" not in ids and "work_item:PROJ-08" in ids
     assert all(e["from"] in ids and e["to"] in ids for e in g["edges"])
+
+
+def test_stalled_list_ignores_stale_banners(monkeypatch):
+    """A limit banner whose reset passed long ago is not a stalled chat (dev showed '2 STALLED' at 17% on 2-day-old banners)."""
+    now, cfg = time.time(), os.path.expanduser("~/.claude-isro")
+    monkeypatch.setattr(sources, "jobs_all", lambda since: [])
+    monkeypatch.setattr(sources.collector, "config_dirs", lambda: [cfg])
+    monkeypatch.setattr(sources.collector, "account_name", lambda c: "isro")
+
+    class M:
+        ok = True
+
+        def read(self):
+            return {}
+    s = sources.Sources(col=object(), meter=M())
+    banners = {"/fresh": {"resets_at": now + 3600}, "/old": {"resets_at": now - 30 * 3600}}
+    s._banner = lambda path, version: banners[path]
+    chats = [{"config": cfg, "kind": "bg", "path": p, "session_id": p, "name": p, "version": None} for p in banners]
+    assert [q["name"] for q in s.refresh(chats)["seats"][0]["queued"]] == ["/fresh"]
+
+
+def test_meter_keeps_the_higher_reading_inside_one_window(tmp_path):
+    """A lower figure with the same reset time is a replayed old reading (an idle chat wrote 69% after others said 100%)."""
+    def line(t, five, r5, seven, r7):
+        return (f"2026-10-06T{t}Z\t/u/.claude-isro\tsid\t"
+                + json.dumps({"five_hour": {"used_percentage": five, "resets_at": r5}, "seven_day": {"used_percentage": seven, "resets_at": r7}}) + "\n")
+    log = tmp_path / "meter.log"
+    log.write_text(line("20:33:14", 100, 5000, 17, 9000) + line("20:50:29", 69, 5000, 11, 9000))
+    m = sources.Meter(str(log)).read()["/u/.claude-isro"]
+    assert (m["five"], m["seven"]) == (100, 17) and m["at"] == sources.iso_epoch("2026-10-06T20:33:14Z")
+    with open(log, "a") as fh:                                     # a new window (different reset time) starts from its own figure
+        fh.write(line("21:00:00", 5, 8000, 17, 9000))
+    m = sources.Meter(str(log)).read()["/u/.claude-isro"]
+    assert (m["five"], m["five_resets"], m["seven"]) == (5, 8000, 17)
 
 
 def test_excluded_seat(tmp_path, monkeypatch):
@@ -444,3 +536,29 @@ def test_chat_that_replied_after_devs_prompt_and_is_still_blocked_asks_again(tmp
     assert len(api.needs_you(snap(chats=[c], jobs=[job()]), 10_000.0)) == 1          # does not hide the new one
     api.dismiss("blocked:work:j1", 400, "new ask")
     assert api.needs_you(snap(chats=[c], jobs=[job()]), 10_000.0) == []
+
+
+def test_api_outage_is_not_a_question(tmpdb):
+    outage = "API unavailable \u2014 retry \u00b7 API Error: Can't reach the API server \u2014 check your internet or DNS (ENOTFOUND)"
+    assert api.needs_you(snap(jobs=[job(needs=outage)]), 10_000.0) == []
+    assert api.needs_you(snap(jobs=[job(needs="", detail="API Error: 529 overloaded_error")]), 10_000.0) == []
+    ny = api.needs_you(snap(jobs=[job(needs="Should the API retry on a 500, or fail fast?")]), 10_000.0)
+    assert [x["kind"] for x in ny] == ["blocked"]          # a real question that mentions the API still shows
+
+
+def test_mid_turn_prompts_show_in_the_transcript_once(tmp_path):
+    from dhi_orbit.cp import transcript
+    rows = [
+        {"type": "user", "timestamp": "2026-10-06T21:00:00Z", "message": {"role": "user", "content": "first prompt"}},
+        {"type": "attachment", "timestamp": "2026-10-06T21:01:00Z", "attachment": {"type": "queued_command", "commandMode": "prompt",
+         "prompt": [{"type": "text", "text": "typed while you were working"}, {"type": "image", "source": {}}]}},
+        {"type": "attachment", "timestamp": "2026-10-06T21:01:30Z", "attachment": {"type": "queued_command", "commandMode": "task-notification",
+         "prompt": "<task-notification>x</task-notification>"}},
+        {"type": "attachment", "timestamp": "2026-10-06T21:02:00Z", "attachment": {"type": "queued_command", "commandMode": "prompt",
+         "prompt": "queued then replayed"}},
+        {"type": "user", "timestamp": "2026-10-06T21:02:05Z", "message": {"role": "user", "content": "queued then replayed"}},
+    ]
+    f = tmp_path / "t.jsonl"
+    f.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    users = [e["text"] for e in transcript.parse(str(f)) if e["kind"] == "user"]
+    assert users == ["first prompt", "typed while you were working\n[image]", "queued then replayed"]

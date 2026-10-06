@@ -25,6 +25,13 @@ const ui = {
   cur: 0,
   items: [],
   setGroup(m) { ui.group = m; store.set("group", m); render(); },
+  openChat: (sid, o = {}) => { if (o.focus) chat.wantFocus = true; if (curSid() === sid) { if (o.focus) { chat.wantFocus = false; chat.focusBox(); } } else location.hash = "#/chat/" + encodeURIComponent(sid); },
+  previewChat: (sid) => { clearTimeout(previewT); previewT = setTimeout(() => { if (curSid() !== sid) location.replace("#/chat/" + encodeURIComponent(sid)); }, 140); },
+  focusList: () => {
+    const root = splitMode && route() === "chat" ? splitList : side;
+    const n = root && (root.querySelector('a.nm[aria-current="true"]') || root.querySelector("a.nm"));
+    if (n) { n.focus(); n.scrollIntoView({ block: "nearest" }); }
+  },
   expand(k) { ui.expanded.add(k); render(); },
   cycleTheme, toggleFocusPanel, showKeys,
   drafts: new Map(),
@@ -102,7 +109,7 @@ const graph = new Feed("graph", 10000, () => {
   const s = dataSig(graph);
   if (s === grSig) return;
   grSig = s;
-  renderSide(side, graph.data, ui);
+  renderSides();
   nebula.update(overview.data, graph.data, healthOf(overview.data, overview).ok);
   if (sky && route() === "sky") sky.update(overview.data, graph.data, healthOf(overview.data, overview).ok);
   if (gview && route() === "graph" && graph.data) gview.update(graph.data);
@@ -115,7 +122,65 @@ const ssec = document.getElementById("setview");
 const lsec = document.getElementById("sessview");
 const ksec = document.getElementById("skyview");
 let sky = null;
-const chat = new ChatView(csec, ui);
+// Split view (nebula look): a chat opens in the right two thirds, the Sessions list stays as the left third.
+const splitMode = currentLook() === "nebula";
+const isPhone = () => matchMedia("(max-width: 820px)").matches;   // one pane at a time: the Sessions list is its own screen, a chat is another
+let splitList = null, splitPane = null, previewT = null, navSid = null;
+if (splitMode) {
+  splitList = h("aside", { class: "split-list", "aria-label": "Chats" });
+  splitPane = h("div", { class: "split-pane" });
+  csec.classList.add("split");
+  // The divider: drag it (or focus it and use Left/Right) to resize the list; double-click or Home resets. The share is remembered.
+  const bar = h("div", { class: "split-bar", role: "separator", "aria-orientation": "vertical", tabindex: "0", title: "Drag to resize the list, double-click to reset",
+    "aria-label": "Resize the chat list" });
+  const MIN_L = 240, MIN_R = 360;
+  const setSplit = (pct, save = true) => {
+    const w = csec.getBoundingClientRect().width || 1;
+    const p = pct == null ? null : Math.min(100 * (w - MIN_R - 14) / w, Math.max(100 * MIN_L / w, pct));
+    if (p == null) csec.style.removeProperty("--split-l"); else csec.style.setProperty("--split-l", p.toFixed(1) + "%");
+    bar.setAttribute("aria-valuenow", String(Math.round(p == null ? 33 : p)));
+    if (save) { try { p == null ? localStorage.removeItem("orbit.splitL") : localStorage.setItem("orbit.splitL", p.toFixed(1)); } catch { /* private window */ } }
+  };
+  bar.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); try { bar.setPointerCapture(e.pointerId); } catch { /* the drag still follows the pointer over the bar */ } csec.classList.add("dragging");
+    const left = csec.getBoundingClientRect().left, w = csec.getBoundingClientRect().width;
+    const move = (ev) => setSplit(100 * (ev.clientX - left) / w, false);
+    const up = () => { bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up); bar.removeEventListener("pointercancel", up);
+      csec.classList.remove("dragging"); setSplit(parseFloat(csec.style.getPropertyValue("--split-l")) || null); };
+    bar.addEventListener("pointermove", move); bar.addEventListener("pointerup", up); bar.addEventListener("pointercancel", up);
+  });
+  bar.addEventListener("dblclick", () => setSplit(null));
+  bar.addEventListener("keydown", (e) => {
+    const cur = parseFloat(csec.style.getPropertyValue("--split-l")) || 100 * splitList.getBoundingClientRect().width / (csec.getBoundingClientRect().width || 1);
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); e.stopPropagation(); setSplit(cur + (e.key === "ArrowRight" ? 2 : -2)); }
+    else if (e.key === "Home") { e.preventDefault(); e.stopPropagation(); setSplit(null); }
+  });
+  csec.replaceChildren(splitList, bar, splitPane);
+  try { const v = parseFloat(localStorage.getItem("orbit.splitL")); if (v > 0) csec.style.setProperty("--split-l", v + "%"); } catch { /* private window */ }
+}
+const chat = new ChatView(splitMode ? splitPane : csec, ui, { embedded: splitMode });
+const curSid = () => (route() === "chat" ? decodeURIComponent(location.hash.slice(7)) : null);
+function renderSides() {
+  renderSide(side, graph.data, ui);
+  if (splitMode && route() === "chat") { renderSide(splitList, graph.data, ui, { split: true, cur: curSid() }); chat.renderNeed(); }
+  else if (splitMode && route() === "sessions" && isPhone()) renderSide(splitList, graph.data, ui, { split: true, cur: null });
+}
+// Up/Down on the chat page: step to the previous/next chat in the left list from anywhere (page, reply box while empty, or Alt+arrows
+// with a draft). Holding the key keeps stepping: the target is tracked in navSid until the route has caught up.
+function stepChat(d) {
+  const rows = [...splitList.querySelectorAll("a.nm")];
+  if (!rows.length) return;
+  const at = rows.findIndex((a) => a.dataset.sid === (navSid || curSid()));
+  const n = rows[at < 0 ? (d > 0 ? 0 : rows.length - 1) : Math.max(0, Math.min(rows.length - 1, at + d))];
+  const fromBox = !splitList.contains(document.activeElement);
+  navSid = n.dataset.sid;
+  rows.forEach((a) => a.setAttribute("aria-current", a === n ? "true" : "false"));
+  n.scrollIntoView({ block: "nearest" });
+  if (fromBox) chat.wantFocus = true;              // the reply box is ready for typing as soon as that chat has loaded
+  ui.previewChat(n.dataset.sid);
+}
+function sizeSplit() { if (splitMode && (route() === "chat" || (route() === "sessions" && isPhone()))) csec.style.height = Math.max(320, innerHeight - rail.getBoundingClientRect().bottom - (parseFloat(getComputedStyle(csec).marginBottom) || 0) - 8) + "px"; }
+addEventListener("resize", sizeSplit);
 const nebula = initNebula(ui);     // stage 1 "Nebula" look of the board, off unless chosen
 let sessTimer = null;
 function route() {
@@ -125,13 +190,30 @@ function route() {
     : x.startsWith("#/settings") ? "settings" : x.startsWith("#/sessions") ? "sessions" : "board";
 }
 let prevRoute = null;
+// The dock's Chats and the S key used to open a separate table page next to the list-and-chat view. In the nebula look they open the
+// split view: the last chat you had open, else the most recently active one. The table's extras (cache, keep-warm, limit resume) are in the chat header.
+async function enterChats() {
+  let sid = null;
+  try { sid = localStorage.getItem("orbit.lastChat"); } catch { /* private window */ }
+  if (!sid) {
+    let g = graph.data;
+    if (!g) { try { g = await get("graph"); } catch { g = null; } }
+    const best = ((g && g.nodes) || []).filter((n) => n.type === "session").sort((a, b) => (b.activity || 0) - (a.activity || 0))[0];
+    sid = best && (best.session_id || best.id.replace(/^session:[^:]+:/, ""));
+  }
+  if (sid && location.hash.startsWith("#/sessions")) location.replace("#/chat/" + encodeURIComponent(sid));
+  else if (location.hash.startsWith("#/sessions")) lsec.hidden = false;   // nothing to open: fall back to the table
+}
 function applyRoute() {
   const r = route();
+  const phoneList = r === "sessions" && splitMode && isPhone();
+  if (r === "sessions" && splitMode && !phoneList) { enterChats(); return; }
   gsec.hidden = r !== "graph";
   wsec.hidden = r !== "work";
-  csec.hidden = r !== "chat";
+  csec.hidden = r !== "chat" && !phoneList;
+  csec.classList.toggle("phone-list", phoneList);
   ssec.hidden = r !== "settings";
-  lsec.hidden = r !== "sessions";
+  lsec.hidden = r !== "sessions" || phoneList;
   ksec.hidden = r !== "sky";
   shell.hidden = r !== "board";
   if (r === "sky" && !sky) sky = new Sky(ksec, ui);
@@ -139,9 +221,10 @@ function applyRoute() {
   render();
   if (r !== "chat") chat.close();
   clearInterval(sessTimer);
-  if (r === "chat") chat.open(decodeURIComponent(location.hash.slice(7)));
+  if (r === "chat") { navSid = null; const sid = decodeURIComponent(location.hash.slice(7)); try { localStorage.setItem("orbit.lastChat", sid); } catch { /* private window */ } chat.open(sid); sizeSplit(); }
   if (r === "settings") renderSettings(ssec, ui);
-  if (r === "sessions") { renderSessions(lsec, ui); sessTimer = setInterval(() => renderSessions(lsec, ui), 10000); }
+  if (phoneList) { renderSides(); sizeSplit(); }
+  if (r === "sessions" && !phoneList) { renderSessions(lsec, ui); sessTimer = setInterval(() => renderSessions(lsec, ui), 10000); }
   // Measure the field only after the new view is shown and scrolled to its top: measured first, the board's nebula
   // was placed at the previous view's scroll offset (847 px down after Graph) and looked missing.
   if (r !== prevRoute) {
@@ -212,7 +295,7 @@ function render() {
   ui.items = needsOrFirstRun(ov);
   if (route() === "board") renderProposals(props, ov, ui);
   renderCapacity(cap, ov, ui);
-  renderSide(side, graph.data, ui);
+  renderSides();
   if (ui.cur >= ui.items.length) ui.cur = Math.max(0, ui.items.length - 1);
   markCur(false);
   badge(ov);
@@ -354,11 +437,49 @@ function markCur(scroll) {
   el.classList.add("cur");
   if (scroll) el.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
 }
+// The shortcut sheet (?): every key the dashboard answers to, grouped. Keep in step with the handler below.
+const KEYS = [
+  ["Go to", [["y", "Sky"], ["h", "Board"], ["c  s", "Chats (s again goes back to the board)"], ["g", "Graph (again: board)"], [",", "Settings"], ["Cmd+K", "Command palette"]]],
+  ["Board", [["j  k", "Move through the needs-you list"], ["1-9", "Answer the selected item"], ["v", "Review decisions"], ["b", "Spoken briefing"], ["c", "Jump to the Sessions list"]]],
+  ["Sessions list", [["Up  Down  j  k", "Move (the chat on the right follows)"], ["Enter  Right", "Open and type a reply"], ["1  2  3", "Group by work item, seat, most recent"], ["/", "Filter the list"], ["Esc", "Leave the list"]]],
+  ["In a chat", [["Cmd+Enter", "Send the reply"], ["Up  Down", "Previous or next chat (while the box is empty)"], ["Left  Esc", "Back to the list"], ["1-9", "Answer a question or approval shown above the box"], ["Option+1-9", "The same, even while typing"], ["Paste  Drop", "Attach a screenshot, image, PDF or document"]]],
+  ["Anywhere", [["f", "Focus panel"], ["t", "Theme"], ["r", "Refresh"], ["?", "This sheet"], ["Esc", "Close"]]],
+];
+let keysEl = null;
+function closeKeys() { if (keysEl) { keysEl.remove(); keysEl = null; } }
 function showKeys() {
-  toast("Cmd+K palette, j/k move, 1-4 answer, v review decisions, g graph, s sessions, comma settings, b briefing, f focus, t theme, r refresh, Esc close");
+  if (keysEl) { closeKeys(); return; }
+  const close = h("button", { class: "btn ghost", onclick: closeKeys }, "Close");
+  keysEl = h("div", { class: "keys-sheet", role: "dialog", "aria-modal": "true", "aria-label": "Keyboard shortcuts", onclick: (e) => { if (e.target === keysEl) closeKeys(); } },
+    h("div", { class: "keys-card" },
+      h("div", { class: "section-head" }, h("h2", {}, "Keyboard"), h("span", { class: "grow" }), close),
+      h("div", { class: "keys-grid" }, KEYS.map(([title, rows]) => h("section", {}, h("h3", {}, title),
+        h("dl", {}, rows.flatMap(([k, d]) => [h("dt", {}, k.split(/\s{2,}/).map((x) => h("kbd", {}, x))), h("dd", {}, d)])))))));
+  document.body.append(keysEl);
+  close.focus();
 }
 document.addEventListener("keydown", (e) => {
+  if (keysEl && e.key === "Escape") { e.preventDefault(); closeKeys(); return; }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); palette.open(); return; }
+  if (splitMode && route() === "chat" && !e.metaKey && !e.ctrlKey) {
+    // 1-9 answer the open chat's question (its options are on screen above the reply box); Option+1-9 works from the box and the list too
+    const dig = /^Digit([1-9])$/.exec(e.code || ""), t0 = e.target;
+    const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(t0.tagName) || t0.isContentEditable, inRow = t0.closest && t0.closest(".split-list a.nm");
+    if (dig && (e.altKey || (!typing && !inRow))) {
+      const btn = chat.needSlot && !chat.needSlot.hidden && chat.needSlot.querySelectorAll(".opt")[Number(dig[1]) - 1];
+      if (btn) { e.preventDefault(); btn.click(); return; }
+    }
+  }
+  if (splitMode && route() === "chat" && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+    const bare = e.target === document.body || e.target === document.documentElement;
+    if ((e.key === "ArrowLeft" && (bare || e.altKey)) ) { e.preventDefault(); ui.focusList(); return; }
+    if ((e.key === "ArrowRight" && (bare || e.altKey)) || (e.key === "Enter" && bare)) { e.preventDefault(); chat.focusBox(); return; }
+  }
+  if (splitMode && route() === "chat" && (e.key === "ArrowDown" || e.key === "ArrowUp") && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+    const t = e.target, field = /^(INPUT|SELECT)$/.test(t.tagName) || t.isContentEditable || (t.tagName === "TEXTAREA" && t.value !== "");
+    const inRow = t.closest && t.closest(".split-list a.nm");
+    if ((!field || e.altKey) && (!inRow || e.altKey)) { e.preventDefault(); stepChat(e.key === "ArrowDown" ? 1 : -1); return; }
+  }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "Escape" && pop && !pop.hidden && pop.contains(e.target)) { pop.hidden = true; return; }   // focus panel: its first field has the caret, so the input guard below would swallow Esc
   if (route() === "graph" && e.target === (gview && gview.canvas) && e.key !== "g") return;   // the canvas owns its keys
@@ -370,12 +491,16 @@ document.addEventListener("keydown", (e) => {
     markCur(true); e.preventDefault();
   } else if (/^[1-9]$/.test(k) && ui.keyed) {
     numberKey(Number(k)); e.preventDefault();
-  } else if (k === "t") cycleTheme();
+  } else if (k === "c" && (route() === "board" || route() === "chat")) { ui.focusList(); e.preventDefault();
+  } else if (k === "c") location.hash = "#/sessions";
+  else if (k === "h") location.hash = "#/";
+  else if (k === "y") location.hash = "#/sky";
+  else if (k === "t") cycleTheme();
   else if (k === "f") toggleFocusPanel();
   else if (k === "r") { overview.now(); graph.now(); toast("Refreshing"); }
   else if (k === "v" && route() === "board") ui.toggleReview();
   else if (k === "g") location.hash = route() === "graph" ? "#/" : "#/graph";
-  else if (k === "s") location.hash = route() === "sessions" ? "#/" : "#/sessions";
+  else if (k === "s") location.hash = route() === "sessions" || (splitMode && route() === "chat") ? "#/" : "#/sessions";
   else if (k === ",") location.hash = route() === "settings" ? "#/" : "#/settings";
   else if (k === "?") showKeys();
   else if (k === "b") ui.voice.briefing();
@@ -421,7 +546,12 @@ async function runIntent(r) {
 }
 
 window.__cp = ui;               // for the acceptance scripts (ui/acceptance); exposes nothing the page does not already show
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => { /* offline shell is optional */ });
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").then((reg) => setInterval(() => reg.update().catch(() => {}), 60000)).catch(() => { /* offline shell is optional */ });
+  // An open tab keeps running the build it loaded. When a deploy swaps the service worker, say so instead of letting new keys silently not work.
+  let hadWorker = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadWorker) toast("A new version of the board is ready: press Cmd+R to load it"); hadWorker = true; });
+}
 
 loadFocus().then(render);
 applyRoute();

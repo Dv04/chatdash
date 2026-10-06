@@ -70,12 +70,21 @@ class Meter:
                 prev = self.last.get(key) or {}
                 # A status line can omit a window (seen: lines with only seven_day after the 5h
                 # reset). Keep the last reading of that window; window() then reports "since reset".
+                five = f5.get("used_percentage") if f5 else prev.get("five")
+                five_resets = f5.get("resets_at") if f5 else prev.get("five_resets")
+                seven = s7.get("used_percentage") if s7 else prev.get("seven")
+                seven_resets = s7.get("resets_at") if s7 else prev.get("seven_resets")
+                # Used percentage only rises inside one window (same resets_at). A lower figure for the same window came from a
+                # status line replaying old data (2026-10-06: an idle chat wrote 69% an hour after others reported 100%): keep the
+                # higher figure, and keep its reading time so the age shown stays honest.
+                held = False
+                if f5 and five is not None and prev.get("five") is not None and five_resets == prev.get("five_resets") and five < prev["five"]:
+                    five, held = prev["five"], True
+                if s7 and seven is not None and prev.get("seven") is not None and seven_resets == prev.get("seven_resets") and seven < prev["seven"]:
+                    seven, held = prev["seven"], True
                 self.last[key] = {
-                    "at": at,
-                    "five": f5.get("used_percentage") if f5 else prev.get("five"),
-                    "five_resets": f5.get("resets_at") if f5 else prev.get("five_resets"),
-                    "seven": s7.get("used_percentage") if s7 else prev.get("seven"),
-                    "seven_resets": s7.get("resets_at") if s7 else prev.get("seven_resets"),
+                    "at": prev["at"] if held else at,
+                    "five": five, "five_resets": five_resets, "seven": seven, "seven_resets": seven_resets,
                     "five_omitted": not f5, "seven_omitted": not s7}
         return self.last
 

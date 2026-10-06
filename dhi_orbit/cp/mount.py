@@ -16,7 +16,7 @@ import time
 import urllib.parse
 
 from .. import actions
-from . import api, autolock, corrections, db, idlecompact, drafts, notify, resume, send, shadow, sources, work
+from . import uploads, api, autolock, corrections, db, idlecompact, drafts, notify, resume, send, shadow, sources, work
 from .devserver import History, ui_file
 
 _ATTACHED = None
@@ -33,6 +33,7 @@ class Attached:
         self.ctx = {"sender": self.sender, "dialog": self._answer_dialog,
                     "stop": actions.stop, "terminal": actions.open_terminal, "reply": actions.reply,
                     "kw": st.kw, "chat_row": lambda key: st.by_key.get(key),
+                    "seen": lambda key, final_at: st.idx.mark_seen(key, final_at),
                     "col": st.col, "search": lambda q: st.idx.search(q), "queue": self.sender.queue}
         self.notifier = notify.Notifier(send=lambda t, b: actions.notify(t, b) if st.notify else None)
         self.auto = [resume.Resumer(sender=lambda chat, text: actions.reply(chat, text)).tick,
@@ -96,13 +97,19 @@ def attach(st) -> Attached:
     return _ATTACHED
 
 
+ROOT_FILES = ("/", "/index.html", "/sw.js", "/manifest.webmanifest", "/icon.svg")   # the dashboard's own files, served at the root
+ROOT_DIRS = ("/css/", "/js/")
+
+
 def route(h, method: str, token: str) -> bool:
-    """Serve /v2/ and /api/cp/ on the live server. Called after DHI Orbit's own guard (host, token, key)."""
+    """Serve the dashboard (at / and, for old bookmarks, /v2/) and /api/cp/ on the live server. Called after DHI Orbit's own
+    guard (host, token, key)."""
     u = urllib.parse.urlparse(h.path)
-    if u.path.startswith("/v2"):
+    sub = u.path[3:] if u.path.startswith("/v2") else u.path if u.path in ROOT_FILES or u.path.startswith(ROOT_DIRS) else None
+    if sub is not None:
         if method != "GET":
             return False
-        p = ui_file(u.path[3:])
+        p = ui_file(sub)
         if not p:
             h._send(404, {"error": "not found"})
             return True
@@ -118,6 +125,16 @@ def route(h, method: str, token: str) -> bool:
         return True
     if not u.path.startswith("/api/cp/") or _ATTACHED is None:
         return False
+    if method == "POST" and u.path == "/api/cp/uploads":
+        # Raw bytes, not JSON: the dashboard attaches a file to a reply. Refused before reading if it is over the cap.
+        n = int(h.headers.get("Content-Length") or 0)
+        if n > uploads.MAX_BYTES:
+            h.close_connection = True
+            h._send(413, {"error": f"file too large (limit {uploads.MAX_BYTES // (1024 * 1024)} MB)"})
+            return True
+        code, out = uploads.save(urllib.parse.unquote(h.headers.get("X-Filename") or ""), h.rfile.read(n))
+        h._send(code, out)
+        return True
     body = {}
     if method != "GET":
         try:

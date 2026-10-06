@@ -61,6 +61,10 @@ def needs(now):
          "options": [{"id": "a", "label": "Merge now", "desc": "CI is green locally"}, {"id": "b", "label": "Wait for smoke test"},
                      {"id": "c", "label": "Close it"}], "recommended": "b", "risk": "high", "on_timeout": "dialog", "held": True, "mode": "on",
          "timeout_at": now + 300, "since": now - 420, "seconds": 420},
+        {"id": "dialog:work:s-7", "kind": "dialog", "session_id": "s-7", "key": "work:s-7", "seat": "work", "work_item": "PROJ-08",
+         "title": "SYNTHETIC chat 7", "text": "Do you want to proceed?", "since": now - 60, "seconds": 60,
+         "screen": {"kind": "permission", "question": "Do you want to proceed?", "tabs": None, "cursor": 1,
+                    "options": [{"n": 1, "label": "Yes", "desc": "", "free": False}, {"n": 2, "label": "No", "desc": "", "free": False}]}},
         {"id": "blocked:work:j-2", "kind": "blocked", "session_id": "s-2", "key": "work:s-2", "seat": "work", "work_item": "PROJ-08",
          "title": "PROJ-08 Research writeup", "text": "(1) go/no-go on paper 08 real-data run (2) pull + clean LaTeX artifacts? (3) route the deploy thread elsewhere?",
          "suggested": "go ahead, start the paper 08 real-data run", "since": now - 7 * 3600, "seconds": 7 * 3600},
@@ -182,15 +186,58 @@ class H(BaseHTTPRequestHandler):
             return self._send(401, {"error": "token"})
         path = u.path[len("/api/cp/"):]
         now = time.time()
+        if method == "POST" and path == "uploads":     # raw bytes, as the real route takes them; kept in a temp dir
+            import tempfile
+            n = int(self.headers.get("Content-Length") or 0)
+            data = self.rfile.read(n)
+            name = urllib.parse.unquote(self.headers.get("X-Filename") or "file")
+            d = STATE.setdefault("updir", tempfile.mkdtemp(prefix="mock-up-"))
+            fp = os.path.join(d, f"{len(os.listdir(d))}-{os.path.basename(name)}")
+            open(fp, "wb").write(data)
+            return self._send(200, {"ok": True, "path": fp, "name": name, "size": len(data), "image": name.lower().endswith((".png", ".jpg"))})
+        if method == "GET" and path == "_replies":      # test hook: what the reply route received
+            return self._send(200, {"replies": STATE.get("replies", [])})
+        if method == "POST" and path.startswith("sessions/") and path.endswith("/reply"):
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            STATE.setdefault("replies", []).append(body.get("text"))
+            return self._send(200, {"ok": True})
         body = {}
         if method != "GET":
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         if method == "GET" and path == "overview":
             return self._send(200, overview(now))
+        if method == "GET" and path == "workitems":
+            home = next((x["seat"] for x in seats(now) if x["seat"] != "main"), None)
+            return self._send(200, {"work_items": [{"id": f"PROJ-{n:02d}", "title": f"PROJ-{n:02d} Sample stream {n} - synthetic work item", "home_seat": home} for n in range(1, 7)]})
+        if method == "GET" and path.startswith("workitems/") and path.endswith("/brief"):
+            wi = path.split("/")[1]
+            home = next((x["seat"] for x in seats(now) if x["seat"] != "main"), None)
+            return self._send(200, {"brief": f"You are continuing work item {wi}. State of play: (synthetic mock brief, a few words so the box is not empty).", "home_seat": home})
         if method == "GET" and path == "capacity":
             return self._send(200, {"generated_at": now, "seats": seats(now)})
         if method == "GET" and path == "graph":
             return self._send(200, graph(now))
+        if method == "GET" and path.startswith("sessions/") and path.endswith("/transcript"):
+            sid = path.split("/")[1]
+            sess = {"session_id": sid, "name": f"SYNTHETIC chat {sid[1:]}" if sid[:1] == "s" else sid, "seat": "alpha", "state": "idle", "live": True,
+                    "kind": "bg", "work_item": "PROJ-08", "limited": False, "excluded": False, "kw": None, "cache_age_min": 4, "warmth": "warm",
+                    "resume": {"pref": None, "global": "dry-run", "effective": "off", "available": True, "why": None}}
+            entries = []
+            for i in range(14):
+                entries.append({"i": i, "kind": "user" if i % 2 == 0 else "text", "ts": now - (30 - i) * 60,
+                                "text": (f"SYNTHETIC prompt {i // 2}: please continue." if i % 2 == 0 else
+                                         f"SYNTHETIC answer {i // 2}.\n\n- first point about the work\n- second point\n\nThis paragraph is filler so the pane has enough text to scroll. " * 3)})
+            entries.append({"i": 14, "kind": "tool", "name": "Bash", "summary": "ls -la", "input": "{\"command\": \"ls -la\"}", "result": "total 0", "ts": now - 60})
+            if sid == "s-7":      # a call that is waiting on the approval
+                entries.append({"i": 99, "kind": "tool", "name": "Monitor", "id": "t-7", "summary": "until grep -q FIN x.out",
+                                "input": json.dumps({"command": "until grep -q FIN /tmp/x.out 2>/dev/null; do sleep 2; done; cat /tmp/x.out", "description": "SYNTHETIC wait for the result", "timeout_ms": 30000}),
+                                "result": None, "error": False, "ts": now - 55})
+            entries.append({"i": 15, "kind": "thinking", "text": "SYNTHETIC thought: the plan is to check the list first.", "ts": now - 50})
+            for k in range(int(now // 4) % 1000):          # the transcript keeps growing, as a working chat does: every poll sees a change
+                entries.append({"i": 16 + k, "kind": "text", "ts": now - 40 + k, "text": f"SYNTHETIC live line {k}"})
+            return self._send(200, {"session": sess, "entries": entries, "start": 0, "total": len(entries), "counts": {"user": 7, "text": 7}})
+        if method == "POST" and path.startswith("sessions/") and path.endswith("/seen"):
+            return self._send(200, {"ok": True})
         if method == "GET" and path == "settings":
             return self._send(200, STATE["settings"])
         if method == "PUT" and path == "settings/focus":

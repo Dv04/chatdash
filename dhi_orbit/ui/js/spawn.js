@@ -20,6 +20,8 @@ function headroom(s) {
 
 let dlg;
 export async function spawnDialog({ workItem, seat, parent, seats, onDone, brief: givenBrief, cwd, title }) {
+  // The page's overview feed refreshes every 5 s: a tap right after load finds no seats yet, so ask for them directly.
+  if (!seats || !seats.length) { try { seats = (await get("capacity")).seats || []; } catch { seats = []; } }
   let wi = null, brief = "";
   try {
     wi = workItem ? await get("workitems/" + encodeURIComponent(workItem)) : null;
@@ -27,6 +29,8 @@ export async function spawnDialog({ workItem, seat, parent, seats, onDone, brief
     brief = (b && b.brief) || "";
   } catch { /* brief endpoint may not exist yet: start empty */ }
   if (givenBrief) brief = givenBrief + (brief ? "\n\n" + brief : "");
+  let wiList = [];
+  try { wiList = (await get("workitems")).work_items || []; } catch { /* no work items: the picker offers free chat only */ }
   const home = (wi && wi.home_seat) || null;
   const pick = seat || home;
   dlg = dlg || document.body.appendChild(h("dialog", { class: "spawn", "aria-label": "Start a session" }));
@@ -47,11 +51,25 @@ export async function spawnDialog({ workItem, seat, parent, seats, onDone, brief
   };
   sel.addEventListener("change", seatWarn);
   seatWarn();
+  // Work item picker: choosing one loads its brief (state of play) and suggests its seat; a brief the user edited is never overwritten.
+  let curWi = workItem || "", autoBrief = brief;
+  const wsel = h("select", { id: "sp-wi", "aria-label": "Work item" }, h("option", { value: "" }, "None (free chat)"),
+    wiList.map((w) => h("option", { value: w.id, selected: w.id === curWi }, w.title || w.id)));
+  wsel.addEventListener("change", async () => {
+    curWi = wsel.value;
+    if (!curWi) { if (ta.value === autoBrief) { ta.value = ""; autoBrief = ""; } sync(); return; }
+    try {
+      const b = await get("workitems/" + encodeURIComponent(curWi) + "/brief");
+      if (!ta.value.trim() || ta.value === autoBrief) { ta.value = (b && b.brief) || ""; autoBrief = ta.value; }
+      if (b && b.home_seat && [...sel.options].some((o) => o.value === b.home_seat)) { sel.value = b.home_seat; seatWarn(); }
+      sync();
+    } catch (err) { toast(`Could not load ${curWi}: ${err.message}`); }
+  });
   const start = h("button", { class: "btn primary", onclick: async (e) => {
     e.preventDefault();
     start.disabled = true;
     try {
-      const res = await post("sessions", { work_item: workItem, seat: sel.value, brief: ta.value.trim(), interview: iv.checked, parent, cwd });
+      const res = await post("sessions", { work_item: curWi || undefined, seat: sel.value, brief: ta.value.trim(), interview: iv.checked, parent, cwd });
       toast(res.queued ? `Queued on ${sel.value}: starts when the seat has headroom` : `Started on ${sel.value} (job ${res.job_id || "?"})`);
       dlg.close();
       onDone && onDone(res);
@@ -63,9 +81,11 @@ export async function spawnDialog({ workItem, seat, parent, seats, onDone, brief
     h("h3", {}, title || (workItem ? `New session: ${(wi && wi.title) || workItem}` : "New session")),
     parent && h("p", { class: "hint" }, `Child of ${parent}`),
     cwd && h("p", { class: "hint" }, `Starts in ${cwd.replace(/^\/Users\/[^/]+/, "~")}`),
+    h("label", { for: "sp-wi" }, "Work item"), wsel,
     h("label", { for: "sp-seat" }, "Seat"), sel, warn,
     h("label", { for: "sp-brief" }, "Brief (from the work item's state of play; edit freely)"), h("div", { class: "replyrow" }, ta, micFor(ta)),
-    h("label", { for: "sp-iv", class: "row" }, iv, " Start with an interview (AskUserQuestion), then write the spec into the state doc"), why,
+    h("label", { for: "sp-iv", class: "row", title: "The new chat first asks you questions one decision at a time (the AskUserQuestion dialog), then writes the agreed spec into the work item's state doc and starts the work. Auto-on for long or build/plan/research briefs." },
+      iv, " Interview me first, then write the spec"), why,
     h("div", { class: "row" }, start, h("button", { class: "btn ghost", value: "cancel" }, "Cancel"))));
   dlg.showModal();
   ta.focus();

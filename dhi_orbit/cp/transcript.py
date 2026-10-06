@@ -35,6 +35,7 @@ def _text_of(c) -> str:
 def parse(path: str) -> list[dict]:
     out: list[dict] = []
     tools: dict[str, dict] = {}
+    queued: dict[str, dict] = {}      # mid-turn prompts by text: the same prompt can also arrive later as a plain user record
     try:
         fh = open(path, "rb")
     except OSError:
@@ -66,9 +67,21 @@ def parse(path: str) -> list[dict]:
                                 tl["result_ts"] = ts
                 text = _text_of(c)
                 if text and not text.startswith("<local-command") and not text.startswith("<command-"):
+                    if queued.pop(text.strip(), None) is not None:
+                        continue
                     out.append({"kind": "user", "ts": ts, "text": _cut(text, MAX_TEXT)})
                 elif text.startswith("<command-name>"):
                     out.append({"kind": "user", "ts": ts, "text": _cut(text, 600), "command": True})
+            elif t == "attachment" and (r.get("attachment") or {}).get("type") == "queued_command" \
+                    and (r.get("attachment") or {}).get("commandMode") == "prompt":
+                # A message typed while the chat was mid-turn is stored as an attachment, not as a user record: without this
+                # it showed in the terminal and never in the dashboard (Dev, 2026-10-06). Task notifications are the other mode.
+                pr = r["attachment"].get("prompt")
+                text = (pr if isinstance(pr, str) else _text_of(pr)).strip()
+                if text and not text.startswith("<local-command") and not text.startswith("<command-"):
+                    e = {"kind": "user", "ts": ts, "text": _cut(text, MAX_TEXT)}
+                    queued[text] = e
+                    out.append(e)
             elif t == "assistant":
                 if r.get("isApiErrorMessage"):
                     out.append({"kind": "notice", "ts": ts, "text": _cut(_text_of(c), 2000)})

@@ -4,6 +4,7 @@ health "unknown" and the affected objects carry state "unknown"."""
 from __future__ import annotations
 
 import json
+import re
 import time
 
 from .. import config
@@ -56,6 +57,14 @@ def answered_after(c: dict, since: float | None) -> bool:
     return t > since + 1
 
 
+# A network or API outage ends a turn; nothing was asked of the user, so a blocked job whose text is only that is not a question.
+TRANSIENT_API = re.compile(r"^\s*API unavailable\b|Can't reach the API server|API Error: (?:5\d\d|Request timed out|Connection (?:error|reset))|\boverloaded_error\b", re.I)
+
+
+def transient_api_error(text: str | None) -> bool:
+    return bool(TRANSIENT_API.search(text or ""))
+
+
 def needs_you(snap: dict, now: float) -> list[dict]:
     """Everything waiting on the user, oldest first: open decisions, dialogs on screen, blocked jobs
     (Claude Code's own 'needs'), and limit-stalled chats whose reset has passed."""
@@ -103,6 +112,8 @@ def needs_you(snap: dict, now: float) -> list[dict]:
             if not c.get("live") and now - b["resets_at"] > resume.MAX_STALL_S:
                 continue
         asked = j.get("blocked_since") or j["updated"]           # updatedAt moves when the daemon rewrites the job
+        if not b and transient_api_error(j.get("needs") or j.get("detail")):
+            continue
         if not b:
             # The user's prompt answers the ask only until the chat speaks again: a reply after it, with the job still
             # blocked and the chat not working, is the chat asking again (from that reply's time). Without this a
@@ -215,6 +226,23 @@ def visible(c: dict) -> bool:
     return c["kind"] in ("bg", "interactive") or c["state"] in ("working", "needs_you")
 
 
+def answers_ready(snap: dict, now: float) -> list[dict]:
+    """Chats that finished a turn whose final answer Dev has not opened yet (the classic board's "Answer ready" column:
+    idle and unread). Opening a chat marks it read; POST sessions/<id>/unseen puts it back."""
+    from . import work
+    out = []
+    for c in snap["chats"]:
+        if not (c.get("unread") and c["state"] == "idle" and c["kind"] in ("bg", "interactive") and (c.get("final") or "").strip()) or work.is_test(c):
+            continue
+        if c.get("banner"):                    # its last message is a usage-limit notice, not an answer (Parked lists it instead)
+            continue
+        fa = sources.iso_epoch(c.get("final_at"))
+        out.append({"id": f"ready:{c['key']}", "kind": "ready", "session_id": c["session_id"], "key": c["key"], "seat": c["account"],
+                    "title": c["name"], "work_item": c.get("ws"), "final": (c.get("final") or "")[-500:], "final_at": c.get("final_at"),
+                    "since": fa, "seconds": _seconds(now, fa), "excluded": c["excluded"]})
+    return sorted(out, key=lambda r: r["since"] or 0, reverse=True)
+
+
 def overview(snap: dict, now: float) -> dict:
     ny = needs_you(snap, now)
     chats = [c for c in snap["chats"] if visible(c)]
@@ -229,7 +257,9 @@ def overview(snap: dict, now: float) -> dict:
     h = health(snap, now)
     props = proposals(now)
     counts["proposals"] = len(props)
-    return {"generated_at": now, "snapshot_at": snap.get("at"), "health": h["state"], "proposals": props,
+    ready = answers_ready(snap, now)
+    counts["answers_ready"] = len(ready)
+    return {"generated_at": now, "snapshot_at": snap.get("at"), "health": h["state"], "proposals": props, "answers_ready": ready,
             "health_reasons": h["reasons"], "needs_you": ny,
             "longest_wait": ({"id": oldest["id"], "seconds": oldest["seconds"], "kind": oldest["kind"],
                               "title": oldest["title"]} if oldest else None),
@@ -421,6 +451,8 @@ def gx_get(parts: list, q1, snap: dict, now: float, ctx: dict) -> tuple[int, dic
 
 def settings_view(ctx: dict | None = None) -> dict:
     out = db.settings()
+    from .. import __version__
+    out["app_version"] = __version__
     try:
         cfg = json.load(open(db.config_path(), encoding="utf-8"))
     except (OSError, ValueError):
@@ -728,6 +760,24 @@ def _handle(method: str, path: str, query: dict, body: dict, src: "sources.Sourc
                     return 409, {"error": f"{c['account']} is at its {'5h' if f5 >= 100 else '7d'} limit: a ping cannot run, so it would warm nothing"}
                 return 200, ctx["reply"](chat, PING_TEXT)
             return 400, {"error": "action must be on, off or now"}
+        if head == "sessions" and len(parts) == 3 and parts[2] in ("seen", "unseen"):
+            if not ctx.get("seen"):
+                return 501, {"error": "read-only server"}
+            c = next((c for c in snap["chats"] if c["session_id"] == parts[1]), None)
+            if not c:
+                return 404, {"error": "no such session in the last 24 h"}
+            ctx["seen"](c["key"], c.get("final_at") if parts[2] == "seen" else "")
+            c["unread"] = parts[2] == "unseen" and bool(c.get("final"))     # the snapshot shows it at once; the next refresh recomputes from the index
+            return 200, {"ok": True}
+        if head == "answers" and len(parts) == 2 and parts[1] == "seen_all":
+            if not ctx.get("seen"):
+                return 501, {"error": "read-only server"}
+            by_key = {c["key"]: c for c in snap["chats"]}
+            marked = answers_ready(snap, now)
+            for r in marked:
+                ctx["seen"](r["key"], r["final_at"])
+                by_key[r["key"]]["unread"] = False
+            return 200, {"ok": True, "marked": len(marked)}
         if head == "sessions" and len(parts) == 3 and parts[2] == "reply":
             if not ctx.get("sender"):
                 return 501, {"error": "read-only server"}

@@ -170,6 +170,8 @@ main:focus { outline: none; }
 .parked li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s2) 0; border-top: 1px solid var(--line); color: var(--ink-2); }
 .parked li .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46ch; color: var(--ink); }
 .parked li .grow { flex: 1; }
+.parked li .rd-snip { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-3); }
+.parked.ready li a.t { text-decoration: none; }
 .parked select { font: inherit; font-size: var(--t-sm); color: var(--ink); background: var(--panel); border: 1px solid var(--line-strong, var(--line)); border-radius: 8px; padding: 4px 8px; max-width: 100%; }
 
 /* ---------------------------------------------------------- strips */
@@ -702,3 +704,52 @@ dialog.palette::backdrop { background: oklch(0% 0 0 / .35); }
 .chat-working i { width: 5px; height: 5px; border-radius: 50%; background: var(--action); animation: cw 1.2s ease-in-out infinite; }
 .chat-working i:nth-child(2) { animation-delay: .15s; } .chat-working i:nth-child(3) { animation-delay: .3s; }
 @keyframes cw { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+
+/* Attachments on a reply (chat.js attach/paintAttach): chips above the box, a drop outline, an Attach button before the mic. */
+.chat-reply { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+.chat-reply .attach-strip { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--s2); }
+.attach-chip { display: inline-flex; align-items: center; gap: var(--s2); max-width: 100%; padding: 3px 4px 3px var(--s2); border: 1px solid var(--line); border-radius: 999px; background: var(--panel); font: var(--t-xs)/1.3 var(--sans, inherit); }
+.attach-chip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 26ch; }
+.attach-chip.err { border-color: var(--bad); color: var(--bad); }
+.attach-chip .x { border: 0; background: none; color: inherit; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 6px; border-radius: 999px; }
+.attach-chip .x:hover, .attach-chip .x:focus-visible { background: color-mix(in oklch, var(--ink) 12%, transparent); }
+.page.chat.drop { outline: 2px dashed var(--action); outline-offset: -6px; }
+@media (max-width: 560px) {
+  .chat-reply { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+  .chat-reply .attach-btn { grid-column: 1; justify-self: start; }
+  .chat-reply .mic { grid-column: 3; }
+  .chat-reply > .btn.primary { grid-column: 4; }
+}
+
+/* Shortcut sheet (app.js showKeys) */
+.keys-sheet { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: var(--s4); background: color-mix(in oklch, var(--bg) 55%, transparent); backdrop-filter: blur(6px); }
+.keys-card { width: min(860px, 100%); max-height: calc(100vh - 2 * var(--s4)); overflow: auto; padding: var(--s4); border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); box-shadow: 0 20px 60px rgb(0 0 0 / .25); }
+.keys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--s4) var(--s5); margin-top: var(--s3); }
+.keys-grid h3 { margin: 0 0 var(--s2); font: var(--t-xs)/1.2 var(--sans, inherit); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3, var(--idle)); }
+.keys-grid dl { display: grid; grid-template-columns: auto 1fr; gap: 6px var(--s3); margin: 0; align-items: baseline; }
+.keys-grid dt { display: flex; flex-wrap: wrap; gap: 4px; }
+.keys-grid dd { margin: 0; }
+.keys-grid kbd { font: 600 var(--t-xs)/1 var(--mono); padding: 3px 7px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel-2); box-shadow: 0 1px 0 var(--line); }
+
+/* Settings: report a bug / send feedback */
+#feedback .pad > :is(input[type="text"], textarea) { display: block; width: 100%; max-width: none; box-sizing: border-box; margin: var(--s2, 8px) 0; font: inherit; }
+#feedback textarea { min-height: 7.5em; resize: vertical; }
+#feedback .row { display: flex; align-items: center; gap: var(--s2, 8px); margin: var(--s2, 8px) 0; flex-wrap: wrap; }
+
+/* A pending dialog locks the reply box (chat.js setBlocked) and shows the call that asks (toolAsk) */
+.chat-reply.locked { opacity: .45; }
+.need-tool { display: grid; gap: var(--s2); margin: var(--s2) 0; }
+.need-call { padding: var(--s2) var(--s3); border: 1px solid var(--line); border-radius: var(--r); background: color-mix(in oklch, var(--ink) 4%, transparent); max-height: 190px; overflow: auto; }
+.need-call dl { display: grid; grid-template-columns: auto 1fr; gap: 2px var(--s3); margin: 4px 0 0; font: var(--t-xs)/1.45 var(--mono); }
+.need-call dt { color: var(--ink-3, var(--idle)); }
+.need-call dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.need-call pre { margin: 4px 0 0; font: var(--t-xs)/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* New session dialog: the brief box fills the row (it is not a .reply, so the phone rule above never widened it: 150 px at 390 px) */
+.spawn-form .replyrow { max-width: none; }
+.spawn-form .replyrow textarea { flex: 1 1 0; min-width: 0; }
+
+@media (max-width: 760px) {   /* phone: native selects and the checkbox row meet the 32 px tap-target floor (iOS ignores min-height on selects, so height) */
+  .spawn-form select { height: 40px; }
+  .spawn-form label.row { min-height: 32px; align-items: center; }
+}

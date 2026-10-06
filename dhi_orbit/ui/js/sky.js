@@ -323,10 +323,11 @@ export class Sky {
     const p = row.seven_day ? pace(row, now, (this.ui.pace && this.ui.pace.pct_per_day) || 14.3) : { state: "unknown" };
     const chats = s.chats.map((c) => {
       const it = c.needs && this.itemFor(c.id);
-      return h("li", {}, h("span", { class: "st " + (c.needs ? "needs_you" : c.state) }),
+      const full = row.state === "blocked" && (c.state === "working" || c.needs);   // seat at its limit: the chat cannot progress
+      return h("li", {}, h("span", { class: "st " + (full ? "limited" : c.needs ? "needs_you" : c.state) }),
         it ? h("button", { class: "nm ask-open", onclick: () => this.openAsk(it) }, h("span", { class: "lbl" }, c.label), h("span", { class: "go" }, "Answer"))
           : h("a", { class: "nm", href: "#/chat/" + encodeURIComponent(c.id) }, c.label),
-        h("span", { class: "rt" }, c.needs ? "needs you" : c.state));
+        h("span", { class: "rt" }, full ? "seat at its limit" : c.needs ? "needs you" : c.state));
     });
     this.panel.replaceChildren(...[         // replaceChildren would print a null as text: filter first
       h("header", {}, h("h2", {}, s.seat), h("span", { class: "fig" }, s.left == null ? "?" : `${Math.round(s.left)}%`, h("small", {}, "week left"))),

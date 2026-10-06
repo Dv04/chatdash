@@ -3,6 +3,7 @@
 // most recently, from auto_log, so "on" is never a blind switch.
 // Sessions (#/sessions): every chat of the last days, with state, cache warmth and keep-warm, linking to history.
 import { h, ct, age, toast } from "./lib.js";
+import { seatsAtLimit, limitWord } from "./limits.js";
 import { get, put, post } from "./api.js";
 import { resumeSeg } from "./chat.js";
 import { renderAccounts } from "./accounts.js";
@@ -96,9 +97,51 @@ export async function renderSettings(el, ui) {
         h("div", { class: "set-text" }, h("h3", {}, "Focus mode", h("span", { class: "chip " + (f.on ? "risk-low" : "") }, f.on ? "on" : "off")),
           h("p", { class: "hint" }, `macOS notifications only for decisions older than ${f.min_age_min} min; the rest arrive at ${(f.windows || []).join(" and ")} (local time).`)),
         h("button", { class: "btn", onclick: () => ui.toggleFocusPanel() }, "Edit")))),
+    feedbackSection(s),
     h("section", { class: "group" }, h("h3", {}, "About"),
       h("p", { class: "hint pad" }, "DHI Orbit, built by Dev Sanghvi at ",
         h("a", { href: "https://dhi-tech.com", target: "_blank", rel: "noopener" }, "DHI"), "."))));
+}
+
+// Report a bug / send feedback: both open a prefilled new issue on the project's GitHub (no mail, no server, nothing is sent
+// from here: you review the text on GitHub and submit it yourself). The only extra data is the version and browser, and only if ticked.
+const ISSUES = "https://github.com/Dv04/dhi-orbit/issues";
+const KINDS = { bug: { label: "Bug", prefix: "Bug: ", hint: "What happened, what you expected, and the steps to reproduce it.", labels: "bug" },
+  feedback: { label: "Feedback", prefix: "Feedback: ", hint: "An idea, something confusing, or anything else you want to tell us.", labels: "feedback" } };
+function feedbackSection(s) {
+  let kind = "bug";
+  const title = h("input", { type: "text", class: "free", maxlength: "120", placeholder: "Short summary", "aria-label": "Issue title" });
+  const body = h("textarea", { rows: "6", "aria-label": "Details" });
+  const diag = h("input", { type: "checkbox", id: "fb-diag", checked: true });
+  const hint = h("p", { class: "hint" }), cap = h("p", { class: "hint" });
+  const seg = h("div", { class: "seg", role: "radiogroup", "aria-label": "Type" });
+  const sync = () => {
+    body.placeholder = KINDS[kind].hint; hint.textContent = KINDS[kind].hint;
+    seg.replaceChildren(...Object.entries(KINDS).map(([k, v]) => h("button", { role: "radio", "aria-checked": String(kind === k), "aria-pressed": String(kind === k),
+      onclick: () => { kind = k; sync(); } }, v.label)));
+  };
+  const url = () => {
+    const k = KINDS[kind];
+    let text = body.value.trim();
+    if (diag.checked) text += `${text ? "\n\n" : ""}---\nDHI Orbit ${s.app_version || "unknown"}, ${navigator.userAgent}`;
+    const cut = text.length > 5000;                       // a URL past about 8 KB is refused by GitHub
+    if (cut) text = text.slice(0, 5000) + "\n[cut: paste the rest here]";
+    cap.textContent = cut ? "The text was long: the first 5000 characters are prefilled, paste the rest on GitHub." : "";
+    const q = new URLSearchParams({ title: k.prefix + title.value.trim(), body: text, labels: k.labels });
+    return `${ISSUES}/new?${q}`;
+  };
+  const open = h("button", { class: "btn primary", onclick: () => {
+    if (!title.value.trim() && !body.value.trim()) { toast("Write a summary or some details first"); return; }
+    window.open(url(), "_blank", "noopener");
+  } }, "Open on GitHub");
+  sync();
+  return h("section", { class: "group", id: "feedback" }, h("h3", {}, "Report a bug or send feedback"),
+    h("div", { class: "pad" },
+      h("p", { class: "hint" }, "Both open a new issue on GitHub with your text filled in. You review it there and submit it yourself; nothing is sent from this page."),
+      seg, hint, title, body,
+      h("label", { for: "fb-diag", class: "row" }, diag, " Add the DHI Orbit version and browser (no chat content, paths or names)"),
+      cap,
+      h("div", { class: "row" }, open, h("a", { class: "btn ghost", href: ISSUES, target: "_blank", rel: "noopener" }, "See existing issues"))));
 }
 
 function paceEditor(s, redraw, ui) {
@@ -118,8 +161,10 @@ export async function renderSessions(el, ui) {
   const show = all.filter((s) => (ui.sessAll || s.state !== "stopped") && (!q || [s.name, s.seat, s.work_item].some((v) => v && v.toLowerCase().includes(q))));
   const find = h("input", { type: "search", class: "field", placeholder: "Filter by name, seat, work item", value: ui.sessQ || "", "aria-label": "Filter sessions",
     oninput: (e) => { ui.sessQ = e.target.value; renderSessions(el, ui); } });
+  const ov = (ui.overview && ui.overview()) || await get("overview").catch(() => null);   // a cold load of this page paints before the feed has arrived
+  const atLimit = seatsAtLimit(ov, ui.graphData && ui.graphData());
   const rows = show.map((s) => h("tr", {},
-    h("td", {}, h("span", { class: "st " + (s.limited ? "limited" : s.state), "aria-hidden": "true" }), " ", s.live ? s.state.replace("_", " ") : "not running"),
+    h("td", {}, h("span", { class: "st " + (limitWord(s, atLimit) ? "limited" : s.state), "aria-hidden": "true" }), " ", limitWord(s, atLimit) || (s.live ? s.state.replace("_", " ") : "not running")),
     h("td", { class: "nm" }, h("a", { href: "#/chat/" + encodeURIComponent(s.session_id) }, s.name)),
     h("td", {}, s.seat, s.excluded && h("span", { class: "hint" }, " (ro)")),
     h("td", {}, s.work_item || ""),
@@ -136,6 +181,7 @@ export async function renderSessions(el, ui) {
   el.replaceChildren(h("div", { class: "page sessions" },
     h("a", { href: "#/", class: "hint" }, "Board"), h("h1", {}, "Sessions"),
     h("div", { class: "chat-tools" }, find,
+      h("button", { class: "btn primary", onclick: () => ui.spawn({}) }, "+ New chat"),
       h("button", { class: "btn ghost", "aria-pressed": String(!!ui.sessAll), onclick: () => { ui.sessAll = !ui.sessAll; renderSessions(el, ui); } },
         ui.sessAll ? "Hide stopped" : `Show stopped (${all.filter((s) => s.state === "stopped").length})`)),
     h("div", { class: "table-wrap" }, h("table", { class: "sess-table" },

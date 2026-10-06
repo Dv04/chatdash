@@ -51,7 +51,7 @@ The Windows port has been tested against a simulated ConPTY only: please report 
 dhi-orbit
 ```
 
-`orbit` is a shorter name for the same command. Then open <http://127.0.0.1:8787/v2/>. `dhi-orbit --help` lists the options (`--port`, `--window-hours`, `--every`, `--no-notify`). macOS notifications for chats that need you are on by default; `--no-notify` turns them off.
+`orbit` is a shorter name for the same command. Then open <http://127.0.0.1:8787/>. `dhi-orbit --help` lists the options (`--port`, `--window-hours`, `--every`, `--no-notify`). macOS notifications for chats that need you are on by default; `--no-notify` turns them off.
 
 On first run DHI Orbit creates its data directory, `~/.config/dhi-orbit` (or `$DHI_ORBIT_HOME`), with mode 700, and an
 access token inside it (`.token`, mode 600). The page gets the token injected when it is served from loopback.
@@ -161,6 +161,67 @@ Both fail open: any error, a read-only account, or a non-background session prin
 | closed chat with no background job | `claude --resume <id> --bg "<text>"` (a copy under a new id; the first reply re-caches the context once) |
 | working right now | refused until idle, or queued and sent when it goes idle |
 
+## Use it on your phone
+
+DHI Orbit listens only on `127.0.0.1` on the computer that runs it, so a phone cannot reach it directly, and there is no hosted version.
+To use it from a phone you put a tunnel of your own in front of it and sign in once with a key. The steps below use a Cloudflare Tunnel;
+any tunnel that forwards a host name to `http://127.0.0.1:8787` works the same way on Orbit's side.
+
+You need a domain on Cloudflare (the free plan is enough), `cloudflared` installed on the computer that runs Orbit, and Orbit running.
+
+1. Create the tunnel and point a host name at it (once):
+
+   ```sh
+   cloudflared tunnel login
+   cloudflared tunnel create orbit
+   cloudflared tunnel route dns orbit orbit.example.com
+   ```
+
+2. Forward that host name to Orbit in `~/.cloudflared/config.yml`:
+
+   ```yaml
+   tunnel: <the id printed by "tunnel create">
+   credentials-file: /home/you/.cloudflared/<the id>.json
+   ingress:
+     - hostname: orbit.example.com
+       service: http://127.0.0.1:8787
+     - service: http_status:404
+   ```
+
+3. Tell Orbit that host name is allowed and that a key may sign you in. Create `public.json` in the data directory
+   (`~/.config/dhi-orbit`, or `$DHI_ORBIT_HOME`):
+
+   ```json
+   {"host": "orbit.example.com", "key_login": true}
+   ```
+
+   Orbit reads this file on every request, so no restart is needed. Any other host name is refused.
+
+4. Start the tunnel, and keep it running (as a service, so it survives a reboot; see Cloudflare's `cloudflared service install`):
+
+   ```sh
+   cloudflared tunnel run orbit
+   ```
+
+5. On the phone, open `https://orbit.example.com`. It asks for the access key: the contents of the file `.token` in the data directory
+   (`cat ~/.config/dhi-orbit/.token` on the computer). Or open `https://orbit.example.com/#k=<the key>` and it signs in by itself;
+   the part after `#` is never sent to the server and the page removes it from the address bar.
+   The sign-in sets a cookie for 30 days (Secure, HttpOnly, this device only). After that the dashboard opens directly.
+
+6. Optional: add it to the home screen (iPhone: Share, Add to Home Screen; Android: the browser menu, Add to Home screen) to open it full screen.
+
+On a phone the dashboard shows one screen at a time: the Sessions list, and a chat when you tap one (the Sessions link in the chat goes back).
+You can answer a question or approve a tool call from the chat screen, and the Attach button opens the phone's file picker to send a
+screenshot or document with your reply.
+
+Keep the key private. Anyone who has the host name and the key can read and reply to your chats and run the actions on the board.
+Wrong keys are limited to 10 per hour per address. To change the key, delete `.token` in the data directory and restart Orbit;
+every device then signs in again with the new one.
+
+For a team, or if you would rather not use a key, Cloudflare Access can sign people in instead: in `public.json` give
+`team_domain` (your `<team>.cloudflareaccess.com` name) and `emails` (the addresses allowed in) in place of `key_login`.
+With a host and neither sign-in method configured, Orbit stays locked.
+
 ## Security model
 
 - The server binds to 127.0.0.1 only. The `Host` header is checked (no DNS rebinding).
@@ -198,6 +259,12 @@ python3 -m pytest -q
 
 `tools/mock/server.py` serves the UI with synthetic data (no real chats are read); `tools/acceptance/` holds the UI
 checks. `docs/DESIGN.md` records the visual design.
+
+## Report a bug or send feedback
+
+Settings > Report a bug or send feedback opens a new issue on <https://github.com/Dv04/dhi-orbit/issues> with your text filled in
+(Bug or Feedback, optionally with the DHI Orbit version and browser). Nothing is sent from the dashboard: you review the issue on
+GitHub and submit it yourself.
 
 ## About
 

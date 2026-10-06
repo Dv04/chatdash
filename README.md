@@ -28,13 +28,13 @@ brew install Dv04/dhi-orbit/dhi-orbit
 pipx:
 
 ```sh
-pipx install git+https://github.com/Dv04/dhi-orbit
+pipx install dhi-orbit
 ```
 
 pip, in any virtualenv:
 
 ```sh
-python3 -m pip install git+https://github.com/Dv04/dhi-orbit
+python3 -m pip install dhi-orbit
 ```
 
 You also need Claude Code itself (`claude` on your `PATH`).

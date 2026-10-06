@@ -102,7 +102,9 @@ export class Graph {
 
   renderBar() {
     if (this.mode !== "map") {
-      this.bar.replaceChildren(this.modeSeg(), h("button", { class: "btn", onclick: () => this.newChat() }, "+ New chat"));
+      // same swipeable mode row as the map bar (it used to wrap "cost per outcome" and clip "overlaps" on a phone)
+      this.bar.replaceChildren(h("div", { class: "g-row g-row-views" }, this.modeSeg()), h("button", { class: "btn", onclick: () => this.newChat() }, "+ New chat"));
+      this.revealMode();
       return;
     }
     const seats = [...new Set((this.data?.nodes || []).filter((n) => n.type === "seat").map((n) => n.seat))];
@@ -134,6 +136,16 @@ export class Graph {
         h("div", { class: "g-filters", role: "group", "aria-label": "States" }, STATES.map((s) => chip(this.filters.states, s, s.replace("_", " ")))),
         nOn > 0 && h("button", { class: "chip toggle", onclick: () => { this.filters.seats.clear(); this.filters.states.clear(); this.relayout(); this.renderBar(); } }, "clear filters")),
       this.frames24 && this.replayBar()].filter((x) => x != null && x !== false));
+    this.revealMode();
+  }
+  // on a phone the mode row scrolls sideways: bring the chosen mode into view so it is never half off the edge
+  revealMode() {
+    requestAnimationFrame(() => {
+      const on = this.bar.querySelector('.g-row-views .seg button[aria-pressed="true"]'), row = on && on.closest(".g-row-views");
+      if (!row || row.scrollWidth <= row.clientWidth) return;
+      const d = on.getBoundingClientRect(), r = row.getBoundingClientRect();
+      if (d.left < r.left + 12 || d.right > r.right - 40) row.scrollLeft += d.left - r.left - 24;
+    });
   }
 
   // ------------------------------------------------------------------ B10 day replay
@@ -460,7 +472,8 @@ export class Graph {
     }
     c.setLineDash([]); c.globalAlpha = 1;
     const show = this.labelSet(c, t, P);
-    for (const n of this.m.nodes) {
+    // seat boxes go under the dots (a chat dot that lands on a seat stays visible) and their text goes on top of both
+    for (const n of [...this.m.nodes].sort((a, b) => (b.type === "seat") - (a.type === "seat"))) {
       const p = P.get(n.id), r = n.r;
       c.globalAlpha = n.ghost ? 0.18 : n.dim ? 0.13 : 1;
       const fill = n.type === "file" || n.type === "folder" ? (n.pinned ? C.focus : n.hot && n.n_sessions > 1 ? C.unknown : C.ink3)
@@ -490,15 +503,27 @@ export class Graph {
         c.strokeStyle = n.change === "born" ? C.ok : n.change === "gone" ? C.idle : C.focus; c.setLineDash(n.change === "gone" ? [3 / t.k, 3 / t.k] : []); c.stroke(); c.setLineDash([]); }
       if (n.flashing) { c.beginPath(); c.arc(p.x, p.y, r + 11 / t.k + 2, 0, Math.PI * 2); c.lineWidth = 3 / t.k; c.strokeStyle = C.working; c.globalAlpha = Math.min(c.globalAlpha, 0.7); c.stroke(); c.globalAlpha = n.dim ? 0.13 : 1; }
       if (this.focus === n.id || this.hover === n.id) { c.beginPath(); c.arc(p.x, p.y, r + 8 / t.k + 2, 0, Math.PI * 2); c.lineWidth = 2 / t.k; c.strokeStyle = C.focus; c.stroke(); }
-      if (show.has(n.id)) {
-        const bold = n.type === "seat" || n.type === "work_item" || n.type === "repo";
+      if (show.has(n.id) && n.type !== "seat") {
+        const bold = n.type === "work_item" || n.type === "repo";
         c.fillStyle = bold ? C.ink : C.ink2;
         c.font = `${bold ? 600 : 400} ${(n.type === "file" || n.type === "pr" ? 11 : 12) / t.k}px -apple-system, system-ui, sans-serif`;
-        c.textAlign = n.type === "seat" ? "center" : "left"; c.textBaseline = "middle";
-        const dy = show.get(n.id) / t.k;
-        if (n.type === "seat") c.fillText(labelText(n), p.x, p.y);
-        else c.fillText(labelText(n), p.x + (n.type === "folder" ? r * 1.3 : r) + 5 / t.k, p.y + dy);
+        const lb = show.get(n.id);
+        c.textAlign = lb.left ? "right" : "left"; c.textBaseline = "middle";
+        const lx = p.x + (lb.left ? -1 : 1) * ((n.type === "folder" ? r * 1.3 : r) + 5 / t.k);
+        if (lb.dy) {                              // a label that moved off its dot's line keeps a thin leader back to it
+          c.beginPath(); c.moveTo(p.x, p.y + Math.sign(lb.dy) * r); c.lineTo(lx, p.y + lb.dy / t.k);
+          c.lineWidth = 1 / t.k; c.strokeStyle = C.ink3; c.globalAlpha = 0.6; c.stroke(); c.globalAlpha = n.dim ? 0.13 : 1;
+        }
+        c.fillText(lb.text, lx, p.y + lb.dy / t.k);
       }
+    }
+    for (const n of this.m.nodes) {
+      if (n.type !== "seat" || !show.has(n.id)) continue;
+      const p = P.get(n.id);
+      c.globalAlpha = n.dim ? 0.13 : 1;
+      c.fillStyle = C.ink; c.font = `600 ${12 / t.k}px -apple-system, system-ui, sans-serif`;
+      c.textAlign = "center"; c.textBaseline = "middle";
+      c.fillText(labelText(n), p.x, p.y);
     }
     c.globalAlpha = 1;
     c.restore();
@@ -531,22 +556,59 @@ export class Graph {
   labelSet(c, t, P) {
     const must = (n) => n.type === "seat" || n.needs_you || this.hover === n.id || this.focus === n.id || (this.hl && !n.dim);
     const rank = (n) => (n.type === "seat" ? 0 : must(n) ? 1 : n.type === "session" ? 3 : 2);
-    const placed = [], show = new Map();               // node id -> vertical nudge in screen px
+    const placed = [], show = new Map();               // node id -> { dy: vertical nudge in screen px, left: label sits left of the dot }
     LBL_MAX = this.W < 520 ? 22 : 34;                  // a phone canvas: shorter chat labels
+    // Obstacles: every seat box at its drawn size (the box is wider and taller than the seat's label text) and every
+    // other drawn shape, so a label never lands on a seat or a dot. A node's own shape is skipped for its own label.
+    const shapes = [];
+    for (const n of this.m.nodes) {
+      if (n.ghost || n.dim) continue;
+      const p = P.get(n.id);
+      if (!p) continue;
+      const sx = p.x * t.k + t.x, sy = p.y * t.k + t.y;
+      if (n.type === "seat") {
+        c.font = "600 12px -apple-system, system-ui, sans-serif";
+        const hw = Math.max(n.r * 1.6 * t.k, (c.measureText(n.label).width + 16) / 2) + 2, hh = Math.max(n.r * 0.8 * t.k, 10) + 2;
+        shapes.push({ id: n.id, box: [sx - hw, sy - hh, sx + hw, sy + hh] });
+      } else {
+        const rr = n.r * t.k + (n.needs_you ? 6 : 1);
+        shapes.push({ id: n.id, box: [sx - rr, sy - rr, sx + rr, sy + rr] });
+      }
+    }
     c.font = "500 12px -apple-system, system-ui, sans-serif";
     for (const n of [...this.m.nodes].sort((a, b) => rank(a) - rank(b))) {
       if (n.ghost || (n.dim && !must(n))) continue;
       const p = P.get(n.id);
       if (!p) continue;
-      const tw = c.measureText(labelText(n)).width, sx = p.x * t.k + t.x, sy = p.y * t.k + t.y, rr = n.r * t.k;
-      const x0 = n.type === "seat" ? sx - tw / 2 - 8 : sx + rr + 4, box = [x0, sy - 9, x0 + tw + (n.type === "seat" ? 16 : 4), sy + 9];
-      if (!must(n) && box[2] > this.W - 4) continue;    // would run off the canvas edge
-      const hits = (dy) => placed.some((q) => box[0] < q[2] && box[2] > q[0] && box[1] + dy < q[3] && box[3] + dy > q[1]);
-      if (!must(n)) { if (!hits(0)) { show.set(n.id, 0); placed.push(box); } continue; }
-      // an always-shown label that collides moves up or down to the nearest free line (seats never move)
-      const inside = (d) => box[1] + d >= 2 && box[3] + d <= this.H - 2;
-      const dy = n.type === "seat" ? 0 : [0, -15, 15, -30, 30, -45, 45].find((d) => inside(d) && !hits(d)) ?? 0;
-      show.set(n.id, dy); placed.push([box[0], box[1] + dy, box[2], box[3] + dy]);
+      const sx = p.x * t.k + t.x, sy = p.y * t.k + t.y, rr = n.r * t.k;
+      if (n.type === "seat") { show.set(n.id, { dy: 0, left: false, text: labelText(n) }); continue; }   // the seat's own box is the label
+      const free = (x, dy) => {
+        const b = [x[0], sy - 9 + dy, x[1], sy + 9 + dy];
+        return b[1] >= 2 && b[3] <= this.H - 2 && b[0] >= 2 && b[2] <= this.W - 2
+          && !shapes.some((s) => s.id !== n.id && b[0] < s.box[2] && b[2] > s.box[0] && b[1] < s.box[3] && b[3] > s.box[1])
+          && !placed.some((q) => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1]);
+      };
+      // plain labels stay on the dot's line to its right; an always-shown label that collides tries the left side of
+      // the dot, then moves up or down to the nearest free line, then retries as a short stub; one with no free spot
+      // at all is hidden (hover and focus still draw it where it was, on top)
+      const full = labelText(n), stub = n.type === "session" ? trunc(n.label, 12) : full;
+      let hit = null;
+      for (const text of must(n) && stub !== full ? [full, stub] : [full]) {
+        const tw = c.measureText(text).width;
+        const right = [sx + rr + 4, sx + rr + 8 + tw], left = [sx - rr - 8 - tw, sx - rr - 4];
+        const tries = must(n) ? [[right, 0], [left, 0], [right, -15], [right, 15], [left, -15], [left, 15], [right, -30], [right, 30], [left, -30], [left, 30], [right, -45], [right, 45]] : [[right, 0]];
+        const f = tries.find(([x, dy]) => free(x, dy));
+        if (f) { hit = { x: f[0], dy: f[1], left: f[0] === left, text }; break; }
+        if (!hit && (this.hover === n.id || this.focus === n.id)) {   // forced: the spot that covers the least
+          const area = (x, dy) => [...shapes.filter((q) => q.id !== n.id).map((q) => q.box), ...placed].reduce((t, q) =>
+            t + Math.max(0, Math.min(x[1], q[2]) - Math.max(x[0], q[0])) * Math.max(0, Math.min(sy + 9 + dy, q[3]) - Math.max(sy - 9 + dy, q[1])), 0);
+          const best = tries.map(([x, dy]) => ({ x, dy, a: area(x, dy) })).sort((p, q) => p.a - q.a)[0];
+          hit = { x: best.x, dy: best.dy, left: best.x === left, text };
+        }
+      }
+      if (!hit) continue;
+      show.set(n.id, { dy: hit.dy, left: hit.left, text: hit.text });
+      placed.push([hit.x[0], sy - 9 + hit.dy, hit.x[1], sy + 9 + hit.dy]);
     }
     return show;
   }
@@ -558,9 +620,10 @@ export class Graph {
     const xs = ns.map((n) => P.get(n.id).tx ?? P.get(n.id).x), ys = ns.map((n) => P.get(n.id).ty ?? P.get(n.id).y);
     const x0 = Math.min(...xs) - 30, x1 = Math.max(...xs) + 30, y0 = Math.min(...ys) - 30, y1 = Math.max(...ys) + 30;
     // Margins in screen pixels (labels are 12 px at any zoom): room for labels on the right, the minimap at the
-    // bottom right, and on a phone the bottom navigation bar that floats over the canvas.
+    // bottom right, and on a phone the bottom navigation bar that floats over the canvas. The left margin holds half a
+    // seat box (seat boxes are screen sized, so a leftmost seat used to be cut off by the canvas edge).
     const phone = matchMedia("(max-width: 760px)").matches;
-    const padL = 16, padR = Math.min(200, this.W * 0.42), padT = 22;
+    const padL = 56, padR = Math.min(200, this.W * (phone ? 0.3 : 0.42)), padT = 22;   // a phone's labels may also sit left of their dot
     const padB = phone ? 100 : this.mini && !this.mini.hidden && this.H > 360 ? 140 : 22;
     const aw = Math.max(40, this.W - padL - padR), ah = Math.max(40, this.H - padT - padB);
     const k = Math.max(0.15, Math.min(1.6, Math.min(aw / (x1 - x0), ah / (y1 - y0))));
@@ -679,7 +742,8 @@ export class Graph {
     if (!n) { this.tip.hidden = true; return; }
     const r = this.stage.getBoundingClientRect();
     const rc = n.receipt;
-    this.tip.replaceChildren(
+    // native replaceChildren stringifies a false argument: drop the guards that did not hold (the tip read "falsefalsefalse")
+    this.tip.replaceChildren(...[
       h("strong", {}, n.label),
       h("div", { class: "hint" }, [n.type, n.needs_you ? "needs you" : n.state, n.seat, n.spend ? `${Math.round(n.spend / 1000)}k units today` : ""].filter(Boolean).join(", ")),
       n.final && h("p", { class: "final" }, n.final.slice(-240)),
@@ -688,7 +752,7 @@ export class Graph {
         rc.test && h("span", { class: "testline" }, rc.test)),
       n.type === "cluster" && h("div", { class: "hint" }, "Click to expand"),
       (n.type === "file" || n.type === "folder") && h("div", { class: "hint" }, `${n.path.replace(/^\/Users\/[^/]+/, "~")}, touched by ${(n.sessions || []).length} chats`),
-      n.type === "pr" && h("div", { class: "hint" }, n.state.replace("pr_", "")));
+      n.type === "pr" && h("div", { class: "hint" }, n.state.replace("pr_", ""))].filter(Boolean));
     this.tip.hidden = false;
     const x = Math.min(ev.clientX - r.left + 14, r.width - 300), y = Math.min(ev.clientY - r.top + 14, r.height - 160);
     this.tip.style.transform = `translate(${x}px, ${y}px)`;
@@ -789,7 +853,11 @@ export class Graph {
   }
   hideMenu() { this.menu.hidden = true; }
 
-  toggleTable() { this.table.hidden = !this.table.hidden; if (!this.table.hidden) this.renderTable(); this.renderBar(); }
+  toggleTable() {
+    this.table.hidden = !this.table.hidden; if (!this.table.hidden) this.renderTable(); this.renderBar();
+    // on a phone the table opens below the map, off screen: bring it up so the button visibly does something
+    if (!this.table.hidden && matchMedia("(max-width: 760px)").matches) requestAnimationFrame(() => this.table.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }));
+  }
   renderTable() {
     const rows = this.m.nodes.slice().sort((a, b) => rank(a) - rank(b));
     this.table.replaceChildren(h("table", {}, h("caption", {}, `${rows.length} nodes (${this.view === "tree" ? "agent tree" : "work graph"})`),

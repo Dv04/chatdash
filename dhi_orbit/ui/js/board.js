@@ -151,6 +151,7 @@ export function renderRail(el, ov, feed, ui) {
 
 export function voiceMenu(ui) {
   const v = ui.voice;
+  for (const p of document.querySelectorAll('.pop[aria-label="Focus mode"]')) p.hidden = true;   // one pop at a time
   v.panel.hidden = false;
   v.panel.replaceChildren(h("h3", {}, "Voice"),
     h("button", { class: "btn", onclick: () => v.briefing() }, "Read the briefing"),

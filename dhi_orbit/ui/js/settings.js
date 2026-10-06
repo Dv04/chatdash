@@ -119,7 +119,7 @@ export async function renderSessions(el, ui) {
   const find = h("input", { type: "search", class: "field", placeholder: "Filter by name, seat, work item", value: ui.sessQ || "", "aria-label": "Filter sessions",
     oninput: (e) => { ui.sessQ = e.target.value; renderSessions(el, ui); } });
   const rows = show.map((s) => h("tr", {},
-    h("td", {}, h("span", { class: "st " + (s.limited ? "limited" : s.state), "aria-hidden": "true" }), " ", s.live ? s.state : "not running"),
+    h("td", {}, h("span", { class: "st " + (s.limited ? "limited" : s.state), "aria-hidden": "true" }), " ", s.live ? s.state.replace("_", " ") : "not running"),
     h("td", { class: "nm" }, h("a", { href: "#/chat/" + encodeURIComponent(s.session_id) }, s.name)),
     h("td", {}, s.seat, s.excluded && h("span", { class: "hint" }, " (ro)")),
     h("td", {}, s.work_item || ""),

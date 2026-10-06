@@ -118,7 +118,7 @@ async function hotspots(el, g) {
       const gEl = svg("g", { class: `tm l${lvl}${c.file ? " file" : ""}`, tabindex: "0" },
         svg("rect", { x: r.x + 1, y: r.y + 1, width: Math.max(0, r.w - 2), height: Math.max(0, r.h - 2), rx: 3 }),
         r.w > 46 && r.h > 18 && svg("text", { x: r.x + 6, y: r.y + 15 }, trunc(c.name, Math.floor(r.w / 7))),
-        r.w > 46 && r.h > 34 && svg("text", { x: r.x + 6, y: r.y + 30, class: "sub" }, `${k(c.edits)} edits${c.file ? "" : `, ${c.files} files`}`));
+        r.w > 46 && r.h > 34 && svg("text", { x: r.x + 6, y: r.y + 30, class: "sub" }, trunc(`${k(c.edits)} edits${c.file ? "" : `, ${c.files} files`}`, Math.floor((r.w - 10) / 6))));
       const open = () => c.file ? fileCard(el, g, c) : drill(names.concat(c.name));
       gEl.addEventListener("click", open);
       gEl.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
@@ -208,11 +208,13 @@ async function spend(el, g) {
     p.addEventListener("pointerleave", () => t.hide());
     return p;
   });
+  // a label sits at its band's top; tiny neighbouring bands would stack their labels, so each is pushed below the one above
+  for (const col of cols) { let floor = -Infinity; for (const n of col) { n.ly = Math.max(n.y + Math.min(n.h / 2, 12) + 4, floor); floor = n.ly + 13; } }
   const nodesEl = cols.flat().map((n) => {
     const full = n.seat && (n.seat.five >= 100 || n.seat.seven >= 100), near = n.seat && (n.seat.five >= 80);
     const gEl = svg("g", { class: "sk-node" + (full ? " full" : near ? " near" : "") },
       svg("rect", { x: n.x, y: n.y, width: nodeW, height: n.h, rx: 2 }),
-      svg("text", { x: n.x === colX[2] ? n.x + nodeW + 6 : n.x + nodeW + 6, y: n.y + Math.min(n.h / 2, 12) + 4 },
+      svg("text", { x: n.x + nodeW + 6, y: n.ly },
         `${trunc(n.label, n.x === colX[2] ? 46 : 24)}  ${k(n.u)}${n.seat ? `  (5h ${n.seat.five ?? "?"}%)` : ""}`));
     if (n.row && n.row.session_id) gEl.addEventListener("click", () => { location.hash = "#/chat/" + encodeURIComponent(n.row.session_id); });
     return gEl;
@@ -295,9 +297,10 @@ async function prs(el, g) {
     (v) => { save(g, "pr.state", v); renderMode(el, "prs", g); })];
   const top = head("PRs", "PRs linked from the chats in view. State comes from gh (cached 15 min, read in the background, so new ones show unknown first). The map's PR layer draws them as hexagons.", ...controls);
   el.replaceChildren(top, h("div", { class: "table-wrap" }, h("table", { class: "sess-table" },
-    h("thead", {}, h("tr", {}, ["PR", "Repo", "State", "Chats"].map((x) => h("th", {}, x)))),
-    h("tbody", {}, list.map((p) => h("tr", {}, h("td", {}, h("a", { href: p.url, target: "_blank", rel: "noopener noreferrer" }, "#" + p.num)), h("td", {}, p.repo),
-      h("td", {}, h("span", { class: "chip pr-" + p.state }, p.state)),
+    // State sits next to the PR number: on a phone only the first two columns fit and the table scrolls sideways
+    h("thead", {}, h("tr", {}, ["PR", "State", "Repo", "Chats"].map((x) => h("th", {}, x)))),
+    h("tbody", {}, list.map((p) => h("tr", {}, h("td", {}, h("a", { href: p.url, target: "_blank", rel: "noopener noreferrer" }, "#" + p.num)),
+      h("td", {}, h("span", { class: "chip pr-" + p.state }, p.state)), h("td", {}, p.repo),
       h("td", { class: "nm" }, p.sessions.map((sid, i) => [i ? ", " : "", h("a", { href: "#/chat/" + encodeURIComponent(sid) }, names.get(sid) || sid.slice(0, 8))]))))))));
 }
 export { toast };

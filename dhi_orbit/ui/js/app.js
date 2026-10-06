@@ -268,6 +268,7 @@ async function loadFocus() {
 }
 function toggleFocusPanel() {
   if (pop && !pop.hidden) { pop.hidden = true; return; }
+  if (ui.voice && !ui.voice.panel.hidden) ui.voice.stop();     // one pop at a time
   const f = ui.focus;
   const on = h("input", { type: "checkbox", id: "f-on", checked: f.on });
   const min = h("input", { type: "number", min: "0", max: "1440", value: String(f.min_age_min), id: "f-min" });
@@ -351,6 +352,7 @@ function showKeys() {
 document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); palette.open(); return; }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "Escape" && pop && !pop.hidden && pop.contains(e.target)) { pop.hidden = true; return; }   // focus panel: its first field has the caret, so the input guard below would swallow Esc
   if (route() === "graph" && e.target === (gview && gview.canvas) && e.key !== "g") return;   // the canvas owns its keys
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return;
   const k = e.key;

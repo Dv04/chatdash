@@ -15,18 +15,22 @@ from __future__ import annotations
 import glob
 import json
 import os
+import posixpath
 import re
 import threading
 import time
 
+from .. import _plat
 from . import db, sources
 
-HOME = os.path.expanduser("~")
+HOME = _plat.to_posix(os.path.expanduser("~"))      # one forward-slash form on every OS
+_RE = re.I if _plat.IS_WIN else 0
 WRITE = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 READ = {"Read"}
 WT = re.compile(r"/\.claude/worktrees/[^/]+/")
 PR = re.compile(rb"https://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)")
 DROP = ("/tmp/", "/private/", "/var/folders/", "/dev/")
+DROP_ANY = ("/AppData/Local/Temp/",)                  # Windows scratch folders
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS cp_fscan (path TEXT PRIMARY KEY, offset INTEGER, size INTEGER, session_id TEXT, seat TEXT);
 CREATE TABLE IF NOT EXISTS cp_touch (norm TEXT, session_id TEXT, kind TEXT, seat TEXT, repo TEXT, n INTEGER,
@@ -48,34 +52,35 @@ def init(path: str | None = None) -> None:
 
 
 def normalize(p: str | None) -> str | None:
-    if not p or not p.startswith("/"):
+    if not _plat.is_abs_path(p):
         return None
-    if p.startswith(DROP):
+    p = _plat.to_posix(p)
+    if p.startswith(DROP) or any(x in p for x in DROP_ANY):
         return None
-    if re.match(re.escape(HOME) + r"/\.claude[^/]*/", p) and "/worktrees/" not in p:
+    if re.match(re.escape(HOME) + r"/\.claude[^/]*/", p, _RE) and "/worktrees/" not in p:
         return None                                    # Claude config, memory, jobs scratch
     p = WT.sub("/", p)
-    return os.path.normpath(p)
+    return posixpath.normpath(p)
 
 
 def repo_of(p: str) -> str:
     """Nearest parent with a .git (dir or file); else the first folder under the home directory."""
-    d = os.path.dirname(p)
+    d = posixpath.dirname(p)
     seen = []
-    while d and d != "/" and len(d) > len(HOME):
+    while d and d != "/" and not d.endswith(":/") and len(d) > len(HOME):
         if d in _repo_cache:
             r = _repo_cache[d]
             break
         seen.append(d)
-        if os.path.exists(os.path.join(d, ".git")):
+        if os.path.exists(posixpath.join(d, ".git")):
             r = d
             break
-        d = os.path.dirname(d)
+        d = posixpath.dirname(d)
     else:
         r = None
     if r is None:
-        rel = os.path.relpath(p, HOME).split(os.sep)
-        r = os.path.join(HOME, *rel[:2]) if p.startswith(HOME) and len(rel) > 2 else os.path.dirname(p)
+        rel = posixpath.relpath(p, HOME).split("/")
+        r = posixpath.join(HOME, *rel[:2]) if p.startswith(HOME) and len(rel) > 2 else posixpath.dirname(p)
     for s in seen:
         _repo_cache[s] = r
     return r

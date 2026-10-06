@@ -29,7 +29,7 @@ UI_DIR = os.environ.get("CP_UI_DIR") or os.path.join(os.path.dirname(HERE), "ui"
 
 def read_token() -> str:
     try:
-        tok = open(config.token_path()).read().strip()
+        tok = open(config.token_path(), encoding="utf-8").read().strip()
     except OSError:
         tok = ""
     if not tok:

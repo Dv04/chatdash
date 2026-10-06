@@ -30,7 +30,7 @@ def log(msg: str) -> None:
         from dhi_orbit import config
         path = os.path.join(config.logs_dir(), "ask_hook.log")
         os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
-        with open(path, "a") as fh:
+        with open(path, "a", encoding="utf-8") as fh:
             fh.write(time.strftime("%Y-%m-%d %H:%M:%S ") + msg + "\n")
     except OSError:
         pass
@@ -75,14 +75,14 @@ def main(stdin=sys.stdin, env=os.environ, sleep=time.sleep, clock=time.time) -> 
     if mode == "off":
         return 0
     try:
-        cfg = json.load(open(db.config_path()))
+        cfg = json.load(open(db.config_path(), encoding="utf-8"))
     except (OSError, ValueError):
         cfg = {}
     hold_s = float(cfg.get("decision_hold_s") or 540)
     db.init()
     cfg_dir = os.path.normpath(os.path.expanduser(env.get("CLAUDE_CONFIG_DIR") or os.path.join(HOME, ".claude")))
     seat = config.account_of_config(cfg_dir)
-    job_id = os.path.basename(env.get("CLAUDE_JOB_DIR", "").rstrip("/")) or None
+    job_id = os.path.basename(env.get("CLAUDE_JOB_DIR", "").rstrip("/\\")) or None
     row = decisions.create(payload, mode=mode, hold_s=hold_s, seat=seat, config=cfg_dir, job_id=job_id, now=clock())
     db.log_auto("decision_hook", mode, payload.get("session_id"), seat, "row written",
                 f"risk {row['risk']} ({row['risk_why']}), on_timeout {row['on_timeout']}",

@@ -20,7 +20,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import actions, collector, config, keepwarm, panels
+from . import _plat, actions, collector, config, keepwarm, panels
 from .index import Index
 from .cp import mount as cp_mount  # DHI Orbit v2 control plane: /v2/ and /api/cp/
 
@@ -32,7 +32,7 @@ def load_public() -> dict:
     {"host", "key_login", "team_domain", "emails": [...]}; "host" falls back to config.json public_url.
     With neither, only 127.0.0.1 and localhost are accepted."""
     try:
-        pub = json.load(open(config.public_path()))
+        pub = json.load(open(config.public_path(), encoding="utf-8"))
         pub = pub if isinstance(pub, dict) else {}
     except (OSError, ValueError):
         pub = {}
@@ -85,13 +85,13 @@ def load_token() -> str:
     """The access token, created on first run in the data directory with mode 600."""
     config.ensure_home()
     try:
-        tok = open(config.token_path()).read().strip()
+        tok = open(config.token_path(), encoding="utf-8").read().strip()
         if tok:
             return tok
     except OSError:
         pass
     tok = secrets.token_urlsafe(24)
-    fd = os.open(config.token_path(), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = os.open(config.token_path(), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _plat.O_BIN, 0o600)
     os.write(fd, tok.encode())
     os.close(fd)
     os.chmod(config.token_path(), 0o600)
@@ -527,6 +527,12 @@ def main() -> None:
     ap.add_argument("--every", type=float, default=1.5, help="refresh seconds (a snapshot costs about 0.1 s)")
     ap.add_argument("--no-notify", action="store_true")
     a = ap.parse_args()
+    if _plat.IS_WIN:                       # a Windows console defaults to cp1252: chat names and arrows must not crash print
+        for st_ in (sys.stdout, sys.stderr):
+            try:
+                st_.reconfigure(encoding="utf-8", errors="replace")
+            except (AttributeError, ValueError):
+                pass
     token = load_token()
     st = State(int(a.window_hours * 3600), not a.no_notify)
     st.cp = cp_mount.attach(st)

@@ -33,7 +33,7 @@ def log(msg: str) -> None:
         from dhi_orbit import config
         path = os.path.join(config.logs_dir(), "stop_hook.log")
         os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
-        with open(path, "a") as fh:
+        with open(path, "a", encoding="utf-8") as fh:
             fh.write(time.strftime("%Y-%m-%d %H:%M:%S ") + msg + "\n")
     except OSError:
         pass
@@ -41,7 +41,7 @@ def log(msg: str) -> None:
 
 def job_name(env) -> str:
     try:
-        return json.load(open(os.path.join(env["CLAUDE_JOB_DIR"], "state.json"))).get("name") or ""
+        return json.load(open(os.path.join(env["CLAUDE_JOB_DIR"], "state.json"), encoding="utf-8")).get("name") or ""
     except (OSError, ValueError, KeyError):
         return ""
 

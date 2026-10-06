@@ -17,17 +17,13 @@ Reply routing (measured 2026-09-25 on throwaway sessions, see DHI Orbit README):
 """
 from __future__ import annotations
 
-import fcntl
 import os
-import select
 import shlex
-import struct
 import subprocess
 import sys
-import termios
 import time
 
-from . import config
+from . import _plat, config
 
 CLAUDE = config.claude_bin()
 PASTE_START, PASTE_END = b"\x1b[200~", b"\x1b[201~"
@@ -49,33 +45,26 @@ def _env(cfg: str) -> dict:
     return env
 
 
-def _drain(fd: int, seconds: float) -> bytes:
+def _drain(pty, seconds: float) -> bytes:
     end, buf = time.time() + seconds, b""
     while time.time() < end:
-        r, _, _ = select.select([fd], [], [], 0.2)
-        if r:
-            try:
-                chunk = os.read(fd, 65536)
-            except OSError:
-                break
-            if not chunk:
-                break
-            buf += chunk
+        chunk = pty.read(min(0.2, max(0.0, end - time.time())))
+        if chunk is None:
+            continue
+        if not chunk:
+            break
+        buf += chunk
     return buf
 
 
-def _drain_until(fd: int, ready, max_s: float, settle: float = 0.25) -> bytes:
+def _drain_until(pty, ready, max_s: float, settle: float = 0.25) -> bytes:
     """Read until ready(buf) is true, then `settle` more seconds so the frame finishes painting; at most max_s.
     `claude attach` paints its input box in about 0.4 s (measured 2026-10-04: 0.29 to 0.44 s over 3 attaches), so a
     fixed multi-second drain only adds latency to every send."""
     end, buf, hit = time.time() + max_s, b"", None
     while time.time() < end and (hit is None or time.time() < hit):
-        r, _, _ = select.select([fd], [], [], 0.05)
-        if r:
-            try:
-                chunk = os.read(fd, 65536)
-            except OSError:
-                break
+        chunk = pty.read(0.05)
+        if chunk is not None:
             if not chunk:
                 break
             buf += chunk
@@ -85,15 +74,17 @@ def _drain_until(fd: int, ready, max_s: float, settle: float = 0.25) -> bytes:
 
 
 def _input_ready(buf: bytes) -> bool:
+    if _plat.IS_WIN:       # ConPTY repaints the screen and may not forward the paste-mode switch: the drawn box is the cue
+        return "❯".encode() in buf
     return b"\x1b[?2004h" in buf and "❯".encode() in buf     # bracketed paste on and the prompt box drawn
 
 
-def _transcript_has(path: str, text: str, since_size: int, timeout: float, fd: int | None = None,
+def _transcript_has(path: str, text: str, since_size: int, timeout: float, pty=None,
                     screen: list | None = None) -> bool:
     """True once a user record containing `text` is appended after since_size; "queued" once the session's own
     queue took it instead (an `enqueue` record: the chat was mid-turn, and the CLI types it in when the turn
     ends, measured 2026-10-05: delivered 10 to 15 s later, after the attach client had closed). False on timeout.
-    With `fd`, keeps reading the attach pty while waiting and appends what it read to `screen`."""
+    With `pty`, keeps reading the attach pty while waiting and appends what it read to `screen`."""
     needle = text.strip()[:60]
     import json
     end = time.time() + timeout
@@ -127,10 +118,10 @@ def _transcript_has(path: str, text: str, since_size: int, timeout: float, fd: i
                         return "queued"
         except OSError:
             pass
-        if fd is None:
+        if pty is None:
             time.sleep(0.15)
         else:
-            out = _drain(fd, 0.15)
+            out = _drain(pty, 0.15)
             if not out:
                 time.sleep(0.05)              # pty closed (attach exited): avoid a busy loop
             elif screen is not None:
@@ -139,41 +130,16 @@ def _transcript_has(path: str, text: str, since_size: int, timeout: float, fd: i
 
 
 def _spawn_attach(cfg: str, job_id: str, cwd: str | None):
-    """Run `claude attach <job>` on a fresh pty. openpty + Popen instead of pty.fork, which is
-    unsafe (and deprecated) in a multi-threaded server."""
+    """Run `claude attach <job>` on a fresh pty (see _plat.Pty: openpty + Popen on POSIX, ConPTY on Windows)."""
     d = cwd if cwd and os.path.isdir(cwd) else config.default_cwd()
     if not os.path.isdir(d):
         d = os.path.expanduser("~")
-    fd, slave = os.openpty()
-    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", ATTACH_ROWS, ATTACH_COLS, 0, 0))
-    try:
-        proc = subprocess.Popen([CLAUDE, "attach", job_id], stdin=slave, stdout=slave, stderr=slave,
-                                env=_env(cfg), cwd=d, start_new_session=True, close_fds=True)
-    except OSError:
-        os.close(fd)
-        raise
-    finally:
-        os.close(slave)
-    return proc, fd
+    return _plat.Pty([CLAUDE, "attach", job_id], _env(cfg), d, ATTACH_ROWS, ATTACH_COLS)
 
 
-def _close_attach(proc, fd: int) -> None:
+def _close_attach(pty) -> None:
     """Close the pty and end the attach client; the background session itself keeps running."""
-    try:
-        os.close(fd)
-    except OSError:
-        pass
-    for stop in (None, proc.terminate, proc.kill):
-        if stop:
-            try:
-                stop()
-            except OSError:
-                pass
-        try:
-            proc.wait(timeout=2)
-            return
-        except subprocess.TimeoutExpired:
-            continue
+    _plat.stop_pty(pty)
 
 
 def type_into_attach(cfg: str, job_id: str, text: str, cwd: str | None,
@@ -181,22 +147,22 @@ def type_into_attach(cfg: str, job_id: str, text: str, cwd: str | None,
     """Open `claude attach <job>` in a pty, paste the text, press Enter, confirm it landed
     in the transcript, then close the pty (the background session keeps running)."""
     size0 = os.path.getsize(transcript) if transcript and os.path.exists(transcript) else 0
-    proc, fd = _spawn_attach(cfg, job_id, cwd)
+    pty = _spawn_attach(cfg, job_id, cwd)
     screen = b""
     try:
-        screen = _drain_until(fd, _input_ready, 6)
-        os.write(fd, PASTE_START + text.encode() + PASTE_END)
+        screen = _drain_until(pty, _input_ready, 6)
+        pty.write(PASTE_START + text.encode() + PASTE_END)
         later: list = []
-        later.append(_drain(fd, 0.4))
-        os.write(fd, b"\r")
-        landed = _transcript_has(transcript, text, size0, confirm_s, fd, later) if transcript else None
-        _drain(fd, 0.2)
+        later.append(_drain(pty, 0.4))
+        pty.write(b"\r")
+        landed = _transcript_has(transcript, text, size0, confirm_s, pty, later) if transcript else None
+        _drain(pty, 0.2)
         screen += b"".join(later)
     except OSError as e:                     # attach already exited (job gone or stopped): the pty is closed
         return {"ok": False, "route": "attach", "error": f"claude attach {job_id} exited before the prompt was "
                 f"typed ({e.strerror}); the chat may be gone", "screen": screen[-400:].decode(errors="replace")}
     finally:
-        _close_attach(proc, fd)
+        _close_attach(pty)
     if landed is False:
         # Seen 2026-10-05 (2 of about 60 sends, not reproduced since): Enter pressed in the last half second of the
         # previous turn was neither submitted nor queued, and the message landed the moment the attach client
@@ -301,14 +267,14 @@ def answer_dialog(chat: dict, n: int, label: str = "", text: str = "") -> dict:
     arrow keys, then Enter (or types `text` into a 'Type something' option). Never guesses."""
     if not chat.get("job_id"):
         return {"ok": False, "error": "only background sessions can be answered here; use Terminal"}
-    proc, fd = _spawn_attach(chat["config"], chat["job_id"], chat.get("cwd"))
+    pty = _spawn_attach(chat["config"], chat["job_id"], chat.get("cwd"))
     try:
-        dlg = parse_dialog(_strip_ansi(_drain_until(fd, lambda b: parse_dialog(_strip_ansi(b[-60000:])) is not None, 6, 0.3)))
+        dlg = parse_dialog(_strip_ansi(_drain_until(pty, lambda b: parse_dialog(_strip_ansi(b[-60000:])) is not None, 6, 0.3)))
         if not dlg:
             return {"ok": False, "error": "no dialog on screen right now (already answered, or the chat "
                                           "is waiting on something else); refresh"}
         if n == 0:
-            os.write(fd, b"\x1b")
+            pty.write(b"\x1b")
             sent = "Esc"
         else:
             opt = next((o for o in dlg["options"] if o["n"] == n), None)
@@ -319,24 +285,24 @@ def answer_dialog(chat: dict, n: int, label: str = "", text: str = "") -> dict:
                         "dialog": dlg}
             steps = n - dlg["cursor"]
             for _ in range(abs(steps)):
-                os.write(fd, b"\x1b[B" if steps > 0 else b"\x1b[A")
+                pty.write(b"\x1b[B" if steps > 0 else b"\x1b[A")
                 time.sleep(0.12)
             if opt["free"] and text:
                 time.sleep(0.2)
-                os.write(fd, PASTE_START + text.encode() + PASTE_END)
+                pty.write(PASTE_START + text.encode() + PASTE_END)
                 time.sleep(0.4)
-            os.write(fd, b"\r")
+            pty.write(b"\r")
             sent = f"{n}. {opt['label'][:40]}" + (" + text" if opt["free"] and text else "")
         def moved(b: bytes) -> bool:            # the dialog closed or changed: no need to wait the full 3 s
             a = parse_dialog(_strip_ansi(b[-60000:]))
             return a is None or (a["question"], a["tabs"], a["cursor"]) != (dlg["question"], dlg["tabs"], dlg["cursor"])
-        after = parse_dialog(_strip_ansi(_drain_until(fd, moved, 3, 0.4)))
+        after = parse_dialog(_strip_ansi(_drain_until(pty, moved, 3, 0.4)))
         same = bool(after and after["question"] == dlg["question"] and after["tabs"] == dlg["tabs"]
                     and after["cursor"] == dlg["cursor"])
         return {"ok": not same, "sent": sent, "next": after,
                 "error": "the dialog did not change; open Terminal to check" if same else None}
     finally:
-        _close_attach(proc, fd)
+        _close_attach(pty)
 
 
 def resume_bg(cfg: str, session_id: str, text: str, cwd: str | None) -> dict:
@@ -386,14 +352,21 @@ def stop(chat: dict) -> dict:
 
 
 def open_terminal(chat: dict) -> dict:
-    """Open macOS Terminal attached to (or resuming) the chat."""
-    envp = "" if os.path.basename(chat["config"]) == ".claude" else \
-        f"CLAUDE_CONFIG_DIR={shlex.quote(chat['config'])} "
-    cd = f"cd {shlex.quote(chat.get('cwd') or config.default_cwd())} && "
-    cmd = cd + envp + (f"claude attach {chat['job_id']}" if chat.get("job_id")
-                       else f"claude --resume {chat['session_id']}")
+    """Open a terminal window attached to (or resuming) the chat: macOS Terminal, or a new console window on Windows."""
+    cwd = chat.get("cwd") or config.default_cwd()
+    named = os.path.basename(chat["config"]) != ".claude"
+    tail = f"claude attach {chat['job_id']}" if chat.get("job_id") else f"claude --resume {chat['session_id']}"
+    if _plat.IS_WIN:
+        cmd = f'cd /d "{cwd}" && ' + (f'set "CLAUDE_CONFIG_DIR={chat["config"]}" && ' if named else "") + tail
+        try:
+            subprocess.Popen(["cmd.exe", "/k", cmd], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        except OSError as e:
+            return {"ok": False, "cmd": cmd, "error": f"could not open a console: {e.strerror}. Run: {cmd}"}
+        return {"ok": True, "cmd": cmd, "error": None}
+    envp = f"CLAUDE_CONFIG_DIR={shlex.quote(chat['config'])} " if named else ""
+    cmd = f"cd {shlex.quote(cwd)} && " + envp + tail
     if sys.platform != "darwin":
-        return {"ok": False, "cmd": cmd, "error": f"Opening a terminal from the page works on macOS only. Run: {cmd}"}
+        return {"ok": False, "cmd": cmd, "error": f"Opening a terminal from the page works on macOS and Windows only. Run: {cmd}"}
     script = f'tell application "Terminal" to do script {json_str(cmd)}\ntell application "Terminal" to activate'
     p = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=15)
     return {"ok": p.returncode == 0, "cmd": cmd, "error": p.stderr[-200:] if p.returncode else None}
@@ -404,16 +377,26 @@ def json_str(s: str) -> str:
 
 
 def notify(title: str, body: str) -> None:
-    """A desktop notification: macOS Notification Center, or notify-send on Linux; silently nothing elsewhere."""
+    """A desktop notification: macOS Notification Center, a Windows tray balloon, or notify-send on Linux;
+    silently nothing elsewhere."""
     import shutil
+    kw: dict = {}
     if sys.platform == "darwin":
         script = f"display notification {json_str(body[:180])} with title {json_str(title[:60])}"
         cmd = ["osascript", "-e", script]
+    elif _plat.IS_WIN:
+        q = lambda t: t.replace("'", "''").replace("\r", " ").replace("\n", " ")
+        ps = ("Add-Type -AssemblyName System.Windows.Forms,System.Drawing;"
+              "$n=New-Object System.Windows.Forms.NotifyIcon;$n.Icon=[System.Drawing.SystemIcons]::Information;"
+              f"$n.Visible=$true;$n.ShowBalloonTip(8000,'{q(title[:60])}','{q(body[:180])}',"
+              "[System.Windows.Forms.ToolTipIcon]::None);Start-Sleep -Seconds 9;$n.Dispose()")
+        cmd = ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps]
+        kw["creationflags"] = 0x08000000                       # CREATE_NO_WINDOW
     elif shutil.which("notify-send"):
         cmd = ["notify-send", title[:60], body[:180]]
     else:
         return
     try:
-        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kw)
     except OSError:
         pass

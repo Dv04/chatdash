@@ -16,7 +16,7 @@ import subprocess
 import threading
 import time
 
-from . import config
+from . import _plat, config
 from .extract import Transcript, iso_epoch
 
 HOME = os.path.expanduser("~")
@@ -49,24 +49,21 @@ def _alive(pids: list[int]) -> set[int]:
     config dir was 85% of a snapshot (measured 2026-10-04: 7 forks, about 290 of 340 ms)."""
     if not pids:
         return set()
+    if _plat.IS_WIN:
+        return _plat.running_pids(pids)
     if time.time() - _PS[0] > 1.0:
         try:
-            out = subprocess.run(["ps", "-A", "-o", "pid=,stat="], capture_output=True, text=True, timeout=5).stdout
+            _PS[1] = _plat.all_running_pids()
         except (OSError, subprocess.TimeoutExpired):
             return set()
-        run = set()
-        for line in out.splitlines():
-            parts = line.split()
-            if len(parts) >= 2 and not parts[1].startswith(("T", "Z")):
-                run.add(int(parts[0]))
-        _PS[0], _PS[1] = time.time(), run
+        _PS[0] = time.time()
     return set(pids) & _PS[1]
 
 
 def live_sessions(cfg: str) -> list[dict]:
     sdir = os.path.join(cfg, "sessions")
     try:
-        bridged = set(json.load(open(os.path.join(sdir, ".cc-bridge.json"))).get("files", {}))
+        bridged = set(json.load(open(os.path.join(sdir, ".cc-bridge.json"), encoding="utf-8")).get("files", {}))
     except (OSError, ValueError):
         bridged = set()
     recs = []
@@ -74,7 +71,7 @@ def live_sessions(cfg: str) -> list[dict]:
         if os.path.basename(f) in bridged:
             continue
         try:
-            d = json.load(open(f))
+            d = json.load(open(f, encoding="utf-8"))
             d["pid"] = int(d.get("pid") or os.path.basename(f).split(".")[0])
         except (OSError, ValueError):
             continue
@@ -87,7 +84,7 @@ def jobs(cfg: str, since: float) -> list[dict]:
     out = []
     for f in glob.glob(os.path.join(cfg, "jobs", "*", "state.json")):
         try:
-            d = json.load(open(f))
+            d = json.load(open(f, encoding="utf-8"))
         except (OSError, ValueError):
             continue
         d["id"] = os.path.basename(os.path.dirname(f))
@@ -251,7 +248,7 @@ class Collector:
         self._meter_off += len(data)
         for raw in data.decode(errors="replace").splitlines():
             parts = raw.split("\t")
-            cfg = next((p for p in parts if p.startswith("/")), None)
+            cfg = next((p for p in parts if _plat.is_abs_path(p)), None)
             if not cfg or not parts[-1].startswith("{"):
                 continue
             try:
@@ -333,7 +330,7 @@ class Collector:
     def _load_pr_cache(self) -> dict[str, tuple]:
         """The last answers survive a restart: every PR used to read "unknown" for minutes after one."""
         try:
-            return {u: (float(t), st) for u, (t, st) in json.load(open(self._pr_file())).items()}
+            return {u: (float(t), st) for u, (t, st) in json.load(open(self._pr_file(), encoding="utf-8")).items()}
         except (OSError, ValueError, TypeError):
             return {}
 
@@ -341,7 +338,7 @@ class Collector:
         try:
             os.makedirs(config.home(), exist_ok=True)
             tmp = self._pr_file() + ".tmp"
-            json.dump({u: [t, st] for u, (t, st) in self._pr_cache.items()}, open(tmp, "w"))
+            json.dump({u: [t, st] for u, (t, st) in self._pr_cache.items()}, open(tmp, "w", encoding="utf-8"))
             os.replace(tmp, self._pr_file())
         except OSError:
             pass

@@ -18,7 +18,7 @@ import os
 import threading
 import time
 
-from .. import collector, config, usage_meter
+from .. import _plat, collector, config, usage_meter
 from ..extract import iso_epoch
 
 from . import limits
@@ -58,7 +58,7 @@ class Meter:
             self.off += cut
             for raw in data[:cut].decode(errors="replace").splitlines():
                 parts = raw.split("\t")
-                cfg = next((p for p in parts if p.startswith("/")), None)
+                cfg = next((p for p in parts if _plat.is_abs_path(p)), None)
                 if not cfg or not parts[-1].startswith("{"):
                     continue
                 try:
@@ -136,7 +136,7 @@ def jobs_all(since: float) -> list[dict]:
     for cfg in collector.config_dirs():
         for f in glob.glob(os.path.join(cfg, "jobs", "*", "state.json")):
             try:
-                d = json.load(open(f))
+                d = json.load(open(f, encoding="utf-8"))
             except (OSError, ValueError):
                 continue
             upd = iso_epoch(d.get("updatedAt")) or os.path.getmtime(f)

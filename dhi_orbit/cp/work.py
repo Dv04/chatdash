@@ -413,7 +413,7 @@ def safe_cwd(cwd: str | None) -> str | None:
     p = os.path.realpath(os.path.expanduser(cwd))
     if os.path.isfile(p):
         p = os.path.dirname(p)
-    return p if os.path.isdir(p) and p.startswith(HOME + os.sep) and "/." not in p[len(HOME):] else None
+    return p if os.path.isdir(p) and p.startswith(HOME + os.sep) and not re.search(r"[\\/]\.", p[len(HOME):]) else None
 
 
 def launch_cmd(wi: str | None, seat: str, brief_text: str, cwd: str | None = None) -> tuple[list, str, dict]:

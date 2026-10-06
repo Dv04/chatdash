@@ -26,7 +26,7 @@ import shlex
 import subprocess
 import sys
 
-from . import config
+from . import _plat, config
 
 SAVED = "dhi-orbit-statusline.json"     # the owner's own status line, kept while DHI Orbit's is on
 MARK = "dhi_orbit.statusline"           # in every command DHI Orbit writes; how its own status line is recognised
@@ -67,7 +67,7 @@ def _write(path: str, data: dict) -> None:
     except OSError:
         pass
     tmp = path + ".dhi-orbit.tmp"
-    with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode), "w", encoding="utf-8") as fh:
+    with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _plat.O_BIN, mode), "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2)
         fh.write("\n")
     os.replace(tmp, path)
@@ -76,6 +76,11 @@ def _write(path: str, data: dict) -> None:
 def command() -> str:
     """The status line command: this interpreter running dhi_orbit.statusline, with the data dir pinned so the
     meter lands where this DHI Orbit reads it."""
+    if _plat.IS_WIN:
+        # cmd, PowerShell and Git Bash disagree about VAR=value prefixes, so the data dir is an argument. Forward slashes
+        # keep shlex (is_ours / missing_interpreter) and every shell reading the same path.
+        q = lambda p: '"' + p.replace("\\", "/") + '"'
+        return f"{q(sys.executable)} -m {MARK} --home {q(config.home())}"
     return (f"DHI_ORBIT_HOME={shlex.quote(config.home())} "
             f"{shlex.quote(sys.executable)} -m {MARK}")
 

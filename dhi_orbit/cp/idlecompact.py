@@ -41,7 +41,7 @@ def _epoch(ts: str | None) -> float | None:
 
 def config() -> tuple[int, int]:
     try:
-        cfg = json.load(open(db.config_path()))
+        cfg = json.load(open(db.config_path(), encoding="utf-8"))
     except (OSError, ValueError):
         cfg = {}
     return int(cfg.get("idle_compact_pings") or 2), int(cfg.get("idle_compact_min_ctx") or 150_000)

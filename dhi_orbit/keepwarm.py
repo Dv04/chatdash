@@ -20,7 +20,7 @@ import subprocess
 import threading
 import time
 
-from . import actions, config, extract
+from . import _plat, actions, config, extract
 
 KEEPALIVE_PREFIX = "[keepalive]"
 PING_TEXT = KEEPALIVE_PREFIX + " Reply with exactly: ok. Do not use tools or continue any task."
@@ -155,13 +155,7 @@ class Awake:
 
     def sync(self, want: bool) -> None:
         if want and (self.p is None or self.p.poll() is not None):
-            try:
-                # -w: caffeinate exits when this server exits, so a restart or crash can never orphan it
-                self.p = subprocess.Popen(["caffeinate", "-i", "-m", "-s", "-w", str(os.getpid())],
-                                          stdout=subprocess.DEVNULL,
-                                          stderr=subprocess.DEVNULL)
-            except OSError:
-                self.p = None
+            self.p = _plat.keep_awake(os.getpid())      # caffeinate (macOS) or a SetThreadExecutionState helper (Windows)
         elif not want and self.p is not None:
             if self.p.poll() is None:
                 self.p.terminate()

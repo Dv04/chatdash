@@ -18,14 +18,12 @@ from __future__ import annotations
 import json
 import os
 import re
-import select
 import shutil
-import signal
 import subprocess
 import threading
 import time
 
-from . import config, usage_meter
+from . import _plat, config, usage_meter
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}$")
 URL_RE = re.compile(r"https://[^\s\x07\x1b\]]+")
@@ -110,9 +108,8 @@ def _live(d: str) -> int:
     for f in os.listdir(os.path.join(d, "sessions")) if os.path.isdir(os.path.join(d, "sessions")) else []:
         if f.endswith(".json") and f.split(".")[0].isdigit():
             try:
-                os.kill(int(f.split(".")[0]), 0)
-                n += 1
-            except (OSError, ValueError):
+                n += _plat.pid_alive(int(f.split(".")[0]))
+            except ValueError:
                 pass
     return n
 
@@ -140,7 +137,7 @@ def _save(key: str, value) -> None:
     data = dict(config.load(p))
     data[key] = value
     tmp = p + ".tmp"
-    with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as fh:
+    with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _plat.O_BIN, 0o600), "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, sort_keys=True)
     os.replace(tmp, p)
 
@@ -200,7 +197,8 @@ def delete(name: str, confirm: str) -> dict:
         _save("hidden_accounts", sorted(hidden() | {name}))
         return {"ok": True, "signed_out": True, "moved_to": None,
                 "note": "~/.claude is your default Claude Code folder: signed out and hidden, not moved"}
-    trash = os.path.join(os.path.expanduser(config.env("TRASH", "~/.Trash")),
+    trash = os.path.join(os.path.expanduser(config.env("TRASH", os.path.join(config.home(), "trash") if _plat.IS_WIN
+                                                       else "~/.Trash")),
                          f"{os.path.basename(d)}-{time.strftime('%Y%m%d-%H%M%S')}")
     os.makedirs(os.path.dirname(trash), exist_ok=True)
     shutil.move(d, trash)
@@ -218,13 +216,10 @@ class Login:
         self.buf, self.code_mark, self.notice = "", None, None
         self.result: dict | None = None
         args = [config.claude_bin(), "auth", "login"] + (["--console"] if console else [])
-        # A pty pair and subprocess, not pty.fork(): forking a multi-threaded server can deadlock the child.
-        self.fd, slave = os.openpty()
-        try:
-            self.proc = subprocess.Popen(args, stdin=slave, stdout=slave, stderr=slave, env=_env(d), cwd=d,
-                                         start_new_session=True, close_fds=True)
-        finally:
-            os.close(slave)
+        # A pty and a subprocess, not pty.fork() (forking a multi-threaded server can deadlock the child);
+        # ConPTY on Windows. See _plat.Pty.
+        self.pty = _plat.Pty(args, _env(d), d)
+        self.proc = self.pty.proc
         self.pid = self.proc.pid
         threading.Thread(target=self._read, daemon=True).start()
 
@@ -234,15 +229,8 @@ class Login:
             if time.time() - self.started > LOGIN_TIMEOUT_S:
                 self._stop("failed", "sign-in timed out after 60 minutes: start it again")
                 break
-            try:
-                r, _, _ = select.select([self.fd], [], [], 0.25)
-            except (OSError, ValueError):
-                break
-            if r:
-                try:
-                    chunk = os.read(self.fd, 65536)
-                except OSError:
-                    chunk = b""
+            chunk = self.pty.read(0.25)
+            if chunk is not None:
                 if not chunk:
                     break
                 buf = buf + ANSI_RE.sub("", chunk.decode(errors="replace"))
@@ -272,10 +260,7 @@ class Login:
             self.state = "done" if st.get("signed_in") else "failed"
             if self.state == "failed" and not self.error:
                 self.error = "sign-in did not complete" + (f": {self.tail.strip()[-200:]}" if self.tail.strip() else "")
-        try:
-            os.close(self.fd)
-        except OSError:
-            pass
+        self.pty.close()
 
     def code(self, text: str) -> dict:
         text = (text or "").strip()
@@ -285,17 +270,14 @@ class Login:
             return {"ok": False, "error": "that does not look like a sign-in code"}
         self.code_mark, self.notice = len(self.buf), None
         try:
-            os.write(self.fd, text.encode() + b"\r")            # typed into Claude Code's own prompt, never stored
+            self.pty.write(text.encode() + b"\r")            # typed into Claude Code's own prompt, never stored
         except OSError as e:
             return {"ok": False, "error": f"the sign-in prompt is gone ({e.strerror})"}
         return {"ok": True}
 
     def _stop(self, state: str, error: str | None = None) -> None:
         if self.pid:
-            try:
-                os.kill(self.pid, signal.SIGTERM)
-            except OSError:
-                pass
+            self.proc.terminate()
         self.state, self.error = state, error
 
     def view(self) -> dict:
@@ -322,7 +304,7 @@ def start_login(name: str, console: bool = False, restart: bool = False) -> dict
         os.makedirs(os.path.join(d, "projects"), exist_ok=True)
         os.makedirs(os.path.join(d, "sessions"), exist_ok=True)
         if fresh:
-            open(os.path.join(d, MARK), "w").close()
+            open(os.path.join(d, MARK), "w", encoding="utf-8").close()
         if name in hidden():
             reconnect(name)
         st = usage_meter.status(d)

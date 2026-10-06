@@ -8,8 +8,10 @@ the background, so a PR shows "unknown" until it is read), receipts, and the liv
 from __future__ import annotations
 
 import os
+import posixpath
 import time
 
+from .. import _plat
 from . import db, fileindex, resume
 
 HOUR = 3600
@@ -30,8 +32,8 @@ def repo_for(c: dict) -> str | None:
     cwd = c.get("cwd")
     if not cwd:
         return None
-    cwd = fileindex.WT.sub("/", cwd.rstrip("/") + "/").rstrip("/")
-    return fileindex.repo_of(os.path.join(cwd, "x"))
+    cwd = fileindex.WT.sub("/", _plat.to_posix(cwd).rstrip("/") + "/").rstrip("/")
+    return fileindex.repo_of(posixpath.join(cwd, "x"))
 
 
 def _short(p: str) -> str:
@@ -39,7 +41,7 @@ def _short(p: str) -> str:
 
 
 def _sessions_of(snap: dict, session: str | None, work_item: str | None, repo: str | None) -> list[str] | None:
-    repo = os.path.expanduser(repo) if repo else repo
+    repo = _plat.to_posix(os.path.expanduser(repo)) if repo else repo
     if session:
         return [session]
     if work_item:
@@ -63,7 +65,7 @@ def files(snap: dict, prefix: str | None = None, session: str | None = None, wor
         q += f" AND session_id IN ({','.join('?' * len(sids))})"
         args += sids
     if prefix:
-        prefix = os.path.expanduser(prefix)
+        prefix = _plat.to_posix(os.path.expanduser(prefix))
         q += " AND norm LIKE ?"
         args.append(prefix.rstrip("/") + "/%")
     if window:

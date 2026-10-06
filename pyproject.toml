@@ -15,9 +15,14 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
     "Topic :: Software Development",
 ]
-dependencies = []          # standard library only
+dependencies = [          # standard library only, except on Windows
+    "pywinpty>=2.0; sys_platform == 'win32'",     # ConPTY: `claude attach` and sign-in run on a pseudo-terminal
+    "tzdata; sys_platform == 'win32'",            # Windows has no IANA time zone database for zoneinfo
+]
 
 [project.scripts]
 dhi-orbit = "dhi_orbit.server:main"

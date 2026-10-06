@@ -422,7 +422,7 @@ def gx_get(parts: list, q1, snap: dict, now: float, ctx: dict) -> tuple[int, dic
 def settings_view(ctx: dict | None = None) -> dict:
     out = db.settings()
     try:
-        cfg = json.load(open(db.config_path()))
+        cfg = json.load(open(db.config_path(), encoding="utf-8"))
     except (OSError, ValueError):
         cfg = {}
     modes = []
@@ -462,7 +462,7 @@ def put_config(body: dict, log_as: str = "config_change") -> str | None:
     path = db.config_path()
     os.makedirs(os.path.dirname(os.path.abspath(path)), mode=0o700, exist_ok=True)
     try:
-        cfg = json.load(open(path))
+        cfg = json.load(open(path, encoding="utf-8"))
     except (OSError, ValueError):
         cfg = {}
     before = {k: cfg.get(k) for k in body}

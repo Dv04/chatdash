@@ -39,6 +39,12 @@ python3 -m pip install dhi-orbit
 
 You also need Claude Code itself (`claude` on your `PATH`).
 
+Windows: `pipx install dhi-orbit` (or pip) pulls in `pywinpty` (ConPTY, used to type into `claude attach` and to run
+sign-in) and `tzdata` by itself. Use Windows 10 version 1809 or newer for ConPTY. The board, replies, answering
+questions, sign-in, keep-warm (the PC is kept awake) and the status-line meter are ported; the Schedules panel
+(launchd and cron) is macOS and Linux only and stays empty on Windows, and desktop notifications are a tray balloon.
+The Windows port has been tested against a simulated ConPTY only: please report anything odd on a real machine.
+
 ## Quick start
 
 ```sh
@@ -180,7 +186,8 @@ which can break parts of DHI Orbit:
 Tested with Claude Code 2.1.289 on macOS. If something looks wrong after an update, the board may be showing stale or
 missing data; limits and health show UNKNOWN rather than OK when a source cannot be read.
 
-macOS-only parts: opening a chat in Terminal and notifications use `osascript`, and the Schedules panel uses `launchctl`.
+macOS-only parts: notifications use `osascript` there (a tray balloon on Windows, `notify-send` on Linux), opening a chat in a
+terminal works on macOS and Windows, and the Schedules panel uses `launchctl`.
 DHI Orbit is developed on macOS; a clean pipx install on Linux was tested end to end (accounts, sign-in, board, nebula).
 
 ## Development

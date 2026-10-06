@@ -189,7 +189,7 @@ def claude_bin() -> str:
     if env:
         return env
     import shutil
-    return shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
+    return shutil.which("claude") or os.path.expanduser("~/.local/bin/claude" + (".exe" if os.name == "nt" else ""))
 
 
 def public_url() -> str:

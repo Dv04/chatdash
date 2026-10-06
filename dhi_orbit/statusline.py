@@ -23,18 +23,18 @@ def record(doc: dict, env=os.environ) -> None:
     blob = json.dumps(limits, separators=(",", ":"), sort_keys=True)
     state_path = log + ".state"
     try:
-        with open(state_path) as fh:
+        with open(state_path, encoding="utf-8") as fh:
             state = json.load(fh)
     except (OSError, ValueError):
         state = {}
     if state.get(cfg) == blob:
         return
     state[cfg] = blob
-    with open(log, "a") as fh:
+    with open(log, "a", encoding="utf-8") as fh:
         fh.write("\t".join([time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), cfg,
                             str(doc.get("session_id") or ""), blob]) + "\n")
     tmp = state_path + ".tmp"
-    with open(tmp, "w") as fh:
+    with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(state, fh)
     os.replace(tmp, state_path)
 
@@ -80,4 +80,6 @@ def main(stdin=None, stdout=None, env=os.environ) -> int:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) >= 3 and sys.argv[1] == "--home":      # Windows command line: no VAR=value prefix (usage_meter.command)
+        os.environ["DHI_ORBIT_HOME"] = sys.argv[2]
     sys.exit(main())

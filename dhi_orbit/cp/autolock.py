@@ -2,10 +2,9 @@
 exclusive lock. Two DHI Orbit servers (say a dev server beside the main one) can run without double-sending."""
 from __future__ import annotations
 
-import fcntl
 import os
 
-from .. import config
+from .. import _plat, config
 
 _fh = None
 
@@ -17,10 +16,8 @@ def acquire(path: str | None = None) -> bool:
         return True
     path = path or os.path.join(config.run_dir(), "auto.lock")
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    fh = open(path, "a+")
-    try:
-        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
+    fh = open(path, "a+", encoding="utf-8")
+    if not _plat.try_lock(fh):
         fh.close()
         return False
     fh.seek(0)

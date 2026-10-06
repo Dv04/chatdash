@@ -138,3 +138,14 @@ def test_waiting_chain_and_routes(tmp):
         code, out = api.handle("GET", p, q, {}, src)
         assert code == 200, (path, out)
     assert api.handle("GET", "gx/nope", {}, {}, src)[0] == 404
+
+
+def test_waiting_drops_dead_chats_whose_reset_passed_long_ago(tmp):
+    seat = {"seat": "work", "config": H + "/.claude-work", "five_hour": {"pct": 100}, "seven_day": {"pct": 4}}
+    old = {"resets_at": NOW - 48 * 3600, "shown_at": NOW - 49 * 3600, "text": "limit"}
+    recent = {"resets_at": NOW - 3600, "shown_at": NOW - 7200, "text": "limit"}
+    s = snap(chat("dead_old", banner=old, live=False, state="stopped"), chat("dead_recent", banner=recent, live=False, state="stopped"),
+             chat("live_old", banner=old, live=True), seats=[seat])
+    w = graphx.waiting(s, [], None, NOW)
+    items = [i["session_id"] for ch in w["chains"] for i in ch["items"]]
+    assert sorted(items) == ["dead_recent", "live_old"]       # live idle chat still waits to be resumed; the dead 48 h one is history

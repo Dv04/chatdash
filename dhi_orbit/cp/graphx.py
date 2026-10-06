@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import time
 
-from . import db, fileindex
+from . import db, fileindex, resume
 
 HOUR = 3600
 
@@ -261,7 +261,10 @@ def waiting(snap: dict, needs: list[dict], queue: dict | None, now: float) -> di
     if dev:
         chains.append({"waits_on": "you", "label": "Waiting on your answer", "items": dev})
     for s in snap.get("seats") or []:
-        stalled = [c for c in snap["chats"] if c["config"] == s["config"] and c.get("banner")]
+        # the board's rule (api.needs_you): a chat whose process is gone and whose reset passed over MAX_STALL_S ago is
+        # not waiting on anything any more; it used to sit here for days as "reset passed"
+        stalled = [c for c in snap["chats"] if c["config"] == s["config"] and c.get("banner")
+                   and (c.get("live") or now - c["banner"]["resets_at"] <= resume.MAX_STALL_S)]
         if not stalled:
             continue
         b = max(c["banner"]["resets_at"] for c in stalled)

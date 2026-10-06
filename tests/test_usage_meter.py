@@ -256,3 +256,12 @@ def test_legacy_statusline_module_still_runs(tmp_path):
     r = subprocess.run([sys.executable, "-m", "chatdash.statusline"], input=doc.encode(), env=env, capture_output=True, timeout=30)
     assert r.returncode == 0 and b"5h 7%" in r.stdout
     assert (tmp_path / "meter.log").exists()
+
+
+def test_a_working_status_line_of_ours_that_differs_is_left_alone(env):
+    # another DHI Orbit install (or a chatdash copy that still runs) owns this line: repair must not take it over
+    other = f"DHI_ORBIT_HOME=/elsewhere {sys.executable} -m dhi_orbit.statusline"
+    d = acct(env, "twin", {"statusLine": {"type": "command", "command": other}})
+    before = mtime(d)
+    assert usage_meter.repair(d) is False
+    assert settings(d)["statusLine"]["command"] == other and mtime(d) == before

@@ -117,14 +117,15 @@ def status(d: str) -> dict:
 
 
 def repair(d: str) -> bool:
-    """Point a status line that is DHI Orbit's (new or legacy mark) at command() when its command differs (moved
-    install, upgraded interpreter, set by chatdash). The saved original is kept; a status line that is not ours, or
+    """Point a status line that is DHI Orbit's (new or legacy mark) at command() when its interpreter no longer exists
+    (an uninstalled or upgraded copy). A working line of ours is left alone even when it differs, so two installs on
+    one account never take turns rewriting it. The saved original is kept; a status line that is not ours, or
     settings that cannot be read, is never touched. True when the settings file was rewritten."""
     try:
         sl = _load(_settings(d)).get("statusLine")
     except (OSError, ValueError):
         return False
-    if not is_ours(sl) or sl.get("command") == command():
+    if not is_ours(sl) or sl.get("command") == command() or not missing_interpreter(str(sl.get("command") or "")):
         return False
     try:
         return bool(turn_on(d).get("ok"))

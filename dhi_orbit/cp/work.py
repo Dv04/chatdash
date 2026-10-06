@@ -429,6 +429,16 @@ def launch_cmd(wi: str | None, seat: str, brief_text: str, cwd: str | None = Non
     return cmd, cwd, env
 
 
+def holds(seat: dict) -> bool:
+    """A new job waits in the queue while the seat is near its limit or blocked. A seat with no reading yet (a fresh
+    account: the meter writes its first line during its first chat) starts at once, or nothing would ever start it;
+    only a partial reading that is already near the limit still waits."""
+    if seat["state"] in ("near", "blocked"):
+        return True
+    known = [(seat.get(k) or {}).get("pct") for k in ("five_hour", "seven_day")]
+    return seat["state"] == "unknown" and any(p is not None and p >= sources.NEAR_PCT for p in known)
+
+
 def spawn(body: dict, snap: dict, runner=subprocess.run) -> tuple[int, dict]:
     wi, seat = body.get("work_item"), body.get("seat")
     text = (body.get("brief") or "").strip()
@@ -448,12 +458,17 @@ def spawn(body: dict, snap: dict, runner=subprocess.run) -> tuple[int, dict]:
     if body.get("parent"):
         text += f"\n\n(Started from the DHI Orbit board as a child of session {body['parent']}.)"
     now = time.time()
-    if st["state"] in ("near", "blocked", "unknown"):
+    note = None
+    if body.get("cwd") and not safe_cwd(body["cwd"]):
+        note = (f"folder {body['cwd']} was not used (it must be an existing folder under your home folder, not a "
+                f"hidden one); the chat starts in {config.default_cwd()}")
+    if holds(st):
         db.execute("INSERT INTO cp_spawn_queue(work_item, seat, brief, interview, parent, created_at, cwd) VALUES(?,?,?,?,?,?,?)",
                    (wi, seat, text, 1 if body.get("interview") else 0, body.get("parent"), now, safe_cwd(body.get("cwd"))))
         db.log_auto("spawn", "manual", None, seat, "queued", f"seat {st['state']}", {"work_item": wi})
-        return 200, {"ok": True, "queued": True, "seat": seat}
-    return _start(wi, seat, text, runner, body.get("cwd"))
+        return 200, {"ok": True, "queued": True, "seat": seat, **({"note": note} if note else {})}
+    code, res = _start(wi, seat, text, runner, body.get("cwd"))
+    return code, ({**res, "note": note} if note and code == 200 else res)
 
 
 def _start(wi, seat, text, runner, cwd=None):
@@ -475,7 +490,7 @@ def drain_queue(snap: dict, runner=subprocess.run) -> list:
     out = []
     seats = {s["seat"]: s for s in snap["seats"]}
     for q in db.rows("SELECT * FROM cp_spawn_queue WHERE state='queued' ORDER BY id"):
-        if (seats.get(q["seat"]) or {}).get("state") != "ok":
+        if q["seat"] not in seats or holds(seats[q["seat"]]):
             continue
         code, res = _start(q["work_item"], q["seat"], q["brief"], runner, q.get("cwd"))
         db.execute("UPDATE cp_spawn_queue SET state=?, started_at=?, job_id=?, detail=? WHERE id=?",

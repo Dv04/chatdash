@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -84,15 +85,51 @@ def is_ours(sl) -> bool:
     return MARK in cmd or LEGACY_MARK in cmd
 
 
+def missing_interpreter(cmd: str) -> str | None:
+    """The absolute interpreter path a command starts with (after any leading VAR=value assignments) when that file
+    is gone, e.g. a pipx venv deleted by an upgrade; None when it exists, is not an absolute path, or cannot be parsed."""
+    try:
+        words = shlex.split(cmd)
+    except ValueError:
+        return None
+    for w in words:
+        if re.match(r"[A-Za-z_][A-Za-z0-9_]*=", w):
+            continue
+        return w if os.path.isabs(w) and not os.path.exists(w) else None
+    return None
+
+
 def status(d: str) -> dict:
     """{"on": bool, "wrapped": bool (the owner's own status line still runs), "other": bool (a status line that is
-    not DHI Orbit's), "error": str|None}."""
+    not DHI Orbit's), "error": str|None}. A status line that is DHI Orbit's but points at an interpreter that no
+    longer exists is not on: it adds "stale": True and names the missing path (repair() or turn_on fixes it)."""
     try:
         sl = _load(_settings(d)).get("statusLine")
     except (OSError, ValueError) as e:
         return {"on": False, "wrapped": False, "other": False, "error": f"settings.json unreadable: {e}"[:200]}
-    return {"on": is_ours(sl), "wrapped": is_ours(sl) and os.path.exists(_saved(d)),
-            "other": bool(sl) and not is_ours(sl), "error": None}
+    ours = is_ours(sl)
+    gone = missing_interpreter(sl["command"]) if ours and sl["command"] != command() else None
+    if gone:
+        return {"on": False, "wrapped": os.path.exists(_saved(d)), "other": False, "stale": True,
+                "error": f"status line points at a missing interpreter: {gone}"[:200]}
+    return {"on": ours, "wrapped": ours and os.path.exists(_saved(d)),
+            "other": bool(sl) and not ours, "error": None}
+
+
+def repair(d: str) -> bool:
+    """Point a status line that is DHI Orbit's (new or legacy mark) at command() when its command differs (moved
+    install, upgraded interpreter, set by chatdash). The saved original is kept; a status line that is not ours, or
+    settings that cannot be read, is never touched. True when the settings file was rewritten."""
+    try:
+        sl = _load(_settings(d)).get("statusLine")
+    except (OSError, ValueError):
+        return False
+    if not is_ours(sl) or sl.get("command") == command():
+        return False
+    try:
+        return bool(turn_on(d).get("ok"))
+    except OSError:
+        return False
 
 
 _cache: dict[str, tuple] = {}
@@ -100,7 +137,8 @@ _cache: dict[str, tuple] = {}
 
 def meter_state(d: str) -> str:
     """"on", "other" (a status line that is not DHI Orbit's) or "off", cached on settings.json's mtime: the board asks
-    for every seat on every refresh."""
+    for every seat on every refresh. A cache miss is also where a status line of ours with an outdated command is
+    repaired, so the settings file is rewritten only when the command differs, not on every refresh."""
     p = _settings(d)
     try:
         key = os.stat(p).st_mtime_ns
@@ -109,6 +147,11 @@ def meter_state(d: str) -> str:
     hit = _cache.get(d)
     if hit and hit[0] == key:
         return hit[1]
+    if repair(d):
+        try:
+            key = os.stat(p).st_mtime_ns
+        except OSError:
+            key = None
     st = status(d)
     v = "on" if st["on"] else "other" if st["other"] else "off"
     _cache[d] = (key, v)

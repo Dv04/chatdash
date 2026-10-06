@@ -149,6 +149,17 @@ class TestDialogParse(unittest.TestCase):
         self.assertTrue(d["options"][2]["free"])
         self.assertEqual(len(d["options"]), 4)
 
+    def test_single_question_dialog_excludes_the_echoed_prompt_line(self):
+        from dhi_orbit import actions
+        s = ("❯ Use the AskUserQuestion tool right now to ask me: pick a letter\r"
+             " ☐ Choice\r Pick A or B\r ❯ 1. A\r Option A.\r 2. B\r Option B.\r 3. Type something.\r"
+             " 4. Chat about this\r Enter to select · ↑/↓ to navigate · Esc to cancel")
+        d = actions.parse_dialog(s)
+        self.assertEqual(d["kind"], "question")
+        self.assertEqual(d["question"], "Pick A or B")
+        self.assertIsNone(d["tabs"])
+        self.assertEqual(len(d["options"]), 4)
+
 
 class TestIndexAndPanels(unittest.TestCase):
     def test_search(self):

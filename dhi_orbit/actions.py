@@ -273,7 +273,10 @@ def parse_dialog(screen: str) -> dict | None:
             tabs, question = head[j], " ".join(head[j + 1:])
             break
     if not question:
-        question = " ".join(head[-3:])
+        # no tab bar (a single question): the screen above it is the echoed prompt ("❯ ...") and the "☐ Header" chip,
+        # neither is the question
+        k = max((j for j, l in enumerate(head) if l.startswith(("❯", "☐"))), default=-1)
+        question = " ".join(head[k + 1:][-3:]) or " ".join(head[-3:])
     for o in opts:
         o["free"] = o["label"].lower().startswith("type something")
     cursor = next((o["n"] for o in opts if o["cursor"]), opts[0]["n"])

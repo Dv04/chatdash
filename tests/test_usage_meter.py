@@ -167,6 +167,67 @@ def test_a_meter_installed_by_chatdash_is_detected_and_turn_on_rewrites_it_to_th
     assert os.path.exists(env / "data" / "meter.log")
 
 
+GONE = "/nonexistent-venv/bin/python"
+
+
+def stale_cmd():
+    return f"{GONE} -m chatdash.statusline"
+
+
+def mtime(d):
+    return os.stat(os.path.join(d, "settings.json")).st_mtime_ns
+
+
+def test_a_status_line_of_ours_pointing_at_a_missing_interpreter_is_not_on_and_is_repaired_keeping_the_original(env):
+    own = {"type": "command", "command": "echo mine", "padding": 1}
+    d = acct(env, "gone", {"statusLine": {"type": "command", "command": f"DHI_ORBIT_HOME=/x {stale_cmd()}", "padding": 3}})
+    (env / "home" / ".claude-gone" / "chatdash-statusline.json").write_text(json.dumps({"statusLine": own}))
+    st = usage_meter.status(d)
+    assert st["on"] is False and st["stale"] is True and GONE in st["error"] and st["wrapped"] is True
+    assert usage_meter.missing_interpreter(f"A=1 B='x y' {GONE} -m m") == GONE
+    assert usage_meter.missing_interpreter(usage_meter.command()) is None            # this interpreter exists
+    assert usage_meter.missing_interpreter("python3 -m m") is None                   # not an absolute path: left to PATH
+    before = mtime(d)
+    assert usage_meter.repair(d) is True
+    sl = settings(d)["statusLine"]
+    assert sl["command"] == usage_meter.command() and sl["padding"] == 3
+    assert usage_meter.saved_command(d) == "echo mine"                                # the saved original is kept
+    assert usage_meter.status(d) == {"on": True, "wrapped": True, "other": False, "error": None}
+    after = mtime(d)
+    assert usage_meter.repair(d) is False and mtime(d) == after != before
+
+
+def test_listing_and_the_board_cache_repair_a_stale_status_line_once_and_start_login_self_repairs(env):
+    d = acct(env, "gone", {"statusLine": {"type": "command", "command": stale_cmd()}})
+    assert [a["usage_meter"] for a in accounts.listing(with_status=False)] == [
+        {"on": True, "wrapped": False, "other": False, "error": None}]
+    assert settings(d)["statusLine"]["command"] == usage_meter.command()
+    m = mtime(d)
+    accounts.listing(with_status=False)
+    assert mtime(d) == m                                                              # same command: not rewritten again
+    d2 = acct(env, "gone2", {"statusLine": {"type": "command", "command": stale_cmd()}})
+    assert usage_meter.meter_state(d2) == "on" and settings(d2)["statusLine"]["command"] == usage_meter.command()
+    m2 = mtime(d2)
+    assert usage_meter.meter_state(d2) == "on" and mtime(d2) == m2
+    d3 = acct(env, "gone3", {"statusLine": {"type": "command", "command": stale_cmd()}})
+    assert usage_meter.status(d3)["stale"] is True
+    assert accounts.start_login("gone3")["ok"]
+    accounts.cancel("gone3")
+    assert settings(d3)["statusLine"]["command"] == usage_meter.command()
+
+
+def test_a_status_line_that_is_not_ours_is_never_touched_even_with_a_missing_interpreter(env):
+    other = {"type": "command", "command": f"{GONE} /opt/my-line.py"}
+    d = acct(env, "mine", {"statusLine": other, "theme": "dark"})
+    raw = open(os.path.join(d, "settings.json")).read()
+    assert usage_meter.status(d) == {"on": False, "wrapped": False, "other": True, "error": None}
+    assert usage_meter.repair(d) is False and usage_meter.meter_state(d) == "other"
+    accounts.listing(with_status=False)
+    assert open(os.path.join(d, "settings.json")).read() == raw
+    bad = acct(env, "bad", "{not json")
+    assert usage_meter.repair(bad) is False and open(os.path.join(bad, "settings.json")).read() == "{not json"
+
+
 def test_turn_off_restores_the_status_line_from_the_legacy_saved_file_and_removes_it(env):
     own = {"type": "command", "command": "echo mine", "padding": 1}
     d = acct(env, "old", {"model": "opus", "statusLine": {"type": "command", "command": LEGACY_CMD}})

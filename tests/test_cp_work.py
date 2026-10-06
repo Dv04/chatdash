@@ -139,6 +139,46 @@ def test_spawn_refuses_main_queues_near_and_starts_ok(tmp):
 
 
 
+def test_fresh_unknown_seat_starts_at_once_and_near_or_blocked_still_queue(tmp):
+    r = R()
+    seat = lambda state, **kw: {"chats": [], "jobs": [], "seats": [dict({"seat": "fresh", "state": state}, **kw)]}
+    code, res = work.spawn({"seat": "fresh", "brief": "pong"}, seat("unknown", five_hour={"pct": None}, seven_day={"pct": None}), runner=r)
+    assert code == 200 and res["queued"] is False and res["job_id"] == "1a2b3c4d" and len(r.calls) == 1
+    assert db.rows("SELECT * FROM cp_spawn_queue") == []
+    for state in ("near", "blocked"):
+        code, res = work.spawn({"seat": "fresh", "brief": "pong"}, seat(state), runner=r)
+        assert code == 200 and res["queued"] is True
+    # a partial reading already near the limit (seven_day not read yet) is still held back
+    code, res = work.spawn({"seat": "fresh", "brief": "pong"}, seat("unknown", five_hour={"pct": 91}, seven_day={"pct": None}), runner=r)
+    assert res["queued"] is True and len(r.calls) == 1 and len(db.rows("SELECT * FROM cp_spawn_queue")) == 3
+
+
+def test_drain_starts_a_queued_job_on_a_seat_with_no_reading_but_not_a_blocked_one(tmp):
+    r = R()
+    db.execute("INSERT INTO cp_spawn_queue(work_item, seat, brief, interview, created_at) VALUES(NULL,'fresh','pong',0,1)")
+    assert work.drain_queue({"seats": [{"seat": "fresh", "state": "blocked"}]}, runner=r) == [] and r.calls == []
+    assert work.drain_queue({"seats": [{"seat": "fresh", "state": "unknown"}]}, runner=r)[0]["job_id"] == "1a2b3c4d"
+    assert db.rows("SELECT state FROM cp_spawn_queue")[0]["state"] == "started"
+
+
+def test_spawn_says_when_the_folder_was_not_used(tmp, monkeypatch):
+    home = tmp / "home"
+    (home / "proj").mkdir(parents=True)
+    monkeypatch.setattr(work, "HOME", str(home))
+    r = R()
+    snap = {"chats": [], "jobs": [], "seats": [{"seat": "work", "state": "ok"}, {"seat": "alpha", "state": "near"}]}
+    code, res = work.spawn({"seat": "work", "brief": "x", "cwd": "/root/cdtest"}, snap, runner=r)
+    assert code == 200 and "/root/cdtest" in res["note"] and "was not used" in res["note"]
+    assert r.calls[0][1]["cwd"] == os.path.expanduser("~")               # still the safe default, never the outside folder
+    code, res = work.spawn({"seat": "alpha", "brief": "x", "cwd": "/etc"}, snap, runner=r)
+    assert res["queued"] is True and "/etc" in res["note"]
+    assert db.rows("SELECT cwd FROM cp_spawn_queue")[0]["cwd"] is None
+    code, res = work.spawn({"seat": "work", "brief": "x", "cwd": str(home / "proj")}, snap, runner=r)
+    assert "note" not in res and r.calls[-1][1]["cwd"] == os.path.realpath(home / "proj")
+    code, res = work.spawn({"seat": "work", "brief": "x"}, snap, runner=r)
+    assert "note" not in res
+
+
 def test_collisions_from_receipts(tmp, monkeypatch):
     monkeypatch.setattr(work.time, "time", lambda: 1100.0)
     receipts.store("s1", "/c", rc("s1", files=(("/r/a.py", "git"),)), True)

@@ -122,6 +122,7 @@ def listing(with_status: bool = True) -> list[dict]:
     out = []
     for d in discovered():
         name = account_name(d)
+        usage_meter.repair(d)                      # a status line of ours that points at a gone interpreter or an old install
         row = {"name": name, "label": config.account_label(name), "dir": d, "hidden": name in hid,
                "created_here": created_here(d), "read_only": config.is_read_only(name),
                "running": _live(d), "login": _logins[name].view() if name in _logins else None,
@@ -153,7 +154,8 @@ def disconnect(name: str) -> dict:
     if not any(account_name(d) == name for d in discovered()):
         return {"ok": False, "error": "no such account"}
     _save("hidden_accounts", sorted(hidden() | {name}))
-    if usage_meter.status(dir_of(name))["on"] and usage_meter.turn_off(dir_of(name)).get("ok"):
+    st = usage_meter.status(dir_of(name))
+    if (st["on"] or st.get("stale")) and usage_meter.turn_off(dir_of(name)).get("ok"):
         _save("meter_paused_accounts", sorted(_paused() | {name}))     # Reconnect turns it back on
     return {"ok": True, "hidden": True}
 
@@ -324,7 +326,7 @@ def start_login(name: str, console: bool = False, restart: bool = False) -> dict
         if name in hidden():
             reconnect(name)
         st = usage_meter.status(d)
-        if not st["on"] and not st["other"] and not st["error"]:
+        if st.get("stale") or (not st["on"] and not st["other"] and not st["error"]):
             usage_meter.turn_on(d)                 # nothing of the owner's to keep: limits show after the first chat
         try:
             _logins[name] = Login(name, d, console)

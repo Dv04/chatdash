@@ -32,7 +32,7 @@ URL_RE = re.compile(r"https://[^\s\x07\x1b\]]+")
 ANSI_RE = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][0-9A-B]")
 MARK = ".dhi-orbit-account"         # written into dirs DHI Orbit created
 LEGACY_MARK = ".chatdash-account"   # the same, written by chatdash before the rename
-LOGIN_TIMEOUT_S = 15 * 60
+LOGIN_TIMEOUT_S = 60 * 60          # a person may take a while to come back with the code
 
 _logins: dict[str, "Login"] = {}
 _lock = threading.Lock()
@@ -230,7 +230,7 @@ class Login:
         buf = ""
         while True:
             if time.time() - self.started > LOGIN_TIMEOUT_S:
-                self._stop("failed", "sign-in timed out after 15 minutes")
+                self._stop("failed", "sign-in timed out after 60 minutes: start it again")
                 break
             try:
                 r, _, _ = select.select([self.fd], [], [], 0.25)

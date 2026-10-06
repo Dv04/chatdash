@@ -150,7 +150,15 @@ function applyRoute() {
   }
   prevRoute = r;
   nebula.apply();
-  if (r === "work") renderWorkItem(wsec, decodeURIComponent(location.hash.slice(7)), ui);
+  if (r === "work") {
+    const wi = decodeURIComponent(location.hash.slice(7));
+    renderWorkItem(wsec, wi, ui);
+    // refetch while it is on screen (it used to load once); not under a focused field or an open detail
+    sessTimer = setInterval(() => {
+      if (document.hidden || wsec.querySelector("details[open], .state-edit:not([readonly])") || wsec.contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+      renderWorkItem(wsec, wi, ui);
+    }, 10000);
+  }
   const m = location.hash.match(/^#\/decision\/(.+)$/);
   if (m) setTimeout(() => focusDecision(decodeURIComponent(m[1])), 400);
   if (r === "graph") {

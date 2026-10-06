@@ -75,10 +75,12 @@ export function renderProposals(el, ov, ui) {
 
 // ------------------------------------------------------------------ work item page
 export async function renderWorkItem(el, id, ui) {
-  el.replaceChildren(h("div", { class: "skeleton" }));
+  const fresh = el.dataset.wi !== id || !el.firstChild;     // a refresh of the same item redraws in place, no skeleton flash
+  el.dataset.wi = id;
+  if (fresh) el.replaceChildren(h("div", { class: "skeleton" }));
   let w;
   try { w = await get("workitems/" + encodeURIComponent(id)); }
-  catch (e) { el.replaceChildren(h("div", { class: "empty" }, h("h3", {}, `Work item ${id}`), h("p", {}, e.message))); return; }
+  catch (e) { if (!fresh) return; el.replaceChildren(h("div", { class: "empty" }, h("h3", {}, `Work item ${id}`), h("p", {}, e.message))); return; }
   const props = (w.proposals || []).filter((p) => p.state === "proposed");
   const ta = h("textarea", { class: "reply state-edit", rows: "18", "aria-label": "State of play", spellcheck: "false", readonly: true });
   ta.value = w.state_text || "";

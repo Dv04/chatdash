@@ -74,6 +74,23 @@ export class Graph {
     this.body.hidden = v !== "map"; this.vw.hidden = v === "map"; this.table.hidden = true;
     this.renderBar();
     if (v === "map") { this.relayout(); this.resize(); } else renderMode(this.vw, v, this);
+    this.watchMode();
+  }
+  // The other views (hotspots, spend, cost per outcome, waiting, overlaps, PRs) used to fetch once, when opened, and then
+  // sit there while the chats moved on. They now refetch while they are on screen: waiting every 5 s (it is a list of
+  // ages), the rest every 15 s. Skipped while the tab is hidden or the person is inside an open detail or card.
+  watchMode() {
+    clearInterval(this.modeTimer); this.modeTimer = null;
+    if (this.mode === "map") return;
+    const mode = this.mode;
+    this.modeAt = Date.now();
+    const busy = () => this.vw.querySelector("details[open]") || document.querySelector(".gx-card") || this.vw.querySelector(".gx-tip:not([hidden])");
+    this.modeTimer = setInterval(async () => {
+      if (this.mode !== mode || this.vw.hidden || this.root.closest("[hidden]") || document.hidden || busy() || this.modeBusy) return;
+      if (Date.now() - this.modeAt < (mode === "waiting" ? 4500 : 14500)) return;
+      this.modeBusy = true;
+      try { await renderMode(this.vw, mode, this); this.modeAt = Date.now(); } finally { this.modeBusy = false; }
+    }, 1000);
   }
 
   async loadLayers(force = false) {
@@ -128,7 +145,7 @@ export class Graph {
   renderBar() {
     if (this.mode !== "map") {
       // same swipeable mode row as the map bar (it used to wrap "cost per outcome" and clip "overlaps" on a phone)
-      this.bar.replaceChildren(h("div", { class: "g-row g-row-views" }, this.modeSeg()), h("button", { class: "btn", onclick: () => this.newChat() }, "+ New chat"));
+      this.bar.replaceChildren(h("div", { class: "g-row g-row-views" }, this.modeSeg()), h("button", { class: "btn", onclick: () => this.newChat() }, "+ New chat"), this.fresh);
       this.revealMode();
       return;
     }

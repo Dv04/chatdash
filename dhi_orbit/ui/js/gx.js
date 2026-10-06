@@ -45,7 +45,8 @@ export async function renderMode(el, mode, g) {
   if (!fn) return;
   if (!el.firstChild || el.dataset.mode !== mode) el.replaceChildren(h("div", { class: "skeleton" }));
   el.dataset.mode = mode;
-  try { await fn(el, g); } catch (e) { fail(el, mode, e); }
+  // a refresh that fails keeps what is on screen (the age line in the bar says when the server cannot be reached)
+  try { await fn(el, g); } catch (e) { if (!el.querySelector(".gx-chart, table, .gx-chains, .strips, .empty:not(.skeleton)")) fail(el, mode, e); }
 }
 
 // ------------------------------------------------------------------ folder browser (map panel)
@@ -250,16 +251,20 @@ async function outcomes(el, g) {
 // ------------------------------------------------------------------ waiting chain
 async function waiting(el, g) {
   const d = await get("gx/waiting");
+  const blocked = new Set(((g.data && g.data.nodes) || []).filter((n) => n.type === "seat" && n.state === "blocked").map((n) => n.seat));
   const top = head("Waiting chain", d.longest ? `Longest wait: ${d.longest.title}, ${age(d.longest.seconds)}.` : "Nothing is waiting.");
   if (!d.chains.length) { el.replaceChildren(top, h("div", { class: "empty" }, h("h3", {}, "Nothing waits"))); return; }
   el.replaceChildren(top, h("div", { class: "gx-chains" }, d.chains.map((ch) => {
     const max = Math.max(1, ...ch.items.map((i) => i.seconds || 0));
+    const parked = ch.waits_on === "you" ? ch.items.filter((i) => blocked.has(i.seat)).length : 0;
     return h("section", { class: "group" },
       h("h3", {}, ch.label, ch.resets_at && h("span", { class: "hint" }, ` resets ${ct(ch.resets_at)}`), h("span", { class: "n" }, String(ch.items.length))),
+      parked > 0 && h("p", { class: "hint" }, `${parked} of these ${parked === 1 ? "is" : "are"} parked: their seat is at a limit, so the header does not count them.`),
       h("ul", { class: "gx-wait" }, ch.items.map((i) => h("li", { class: d.longest && i.session_id === d.longest.session_id && i.seconds === d.longest.seconds ? "longest" : "" },
         h("span", { class: "track" }, h("i", { style: `width:${(100 * (i.seconds || 0)) / max}%` })),
         h("a", { class: "nm", href: "#/chat/" + encodeURIComponent(i.session_id) }, i.title),
         h("span", { class: "chip" }, i.kind), i.running === false && h("span", { class: "chip ro" }, "stopped"),
+        ch.waits_on === "you" && blocked.has(i.seat) && h("span", { class: "chip risk-med" }, "parked"),
         i.passed && h("span", { class: "chip risk-med" }, "reset passed"),
         h("span", { class: "rt" }, i.seconds != null ? age(i.seconds) : "?")))));
   })), h("p", { class: "hint" }, "Answer questions on the board; limit stalls clear at the reset (or by limit resume); queued replies go in when the chat finishes its turn."));

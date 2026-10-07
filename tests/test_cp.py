@@ -483,7 +483,7 @@ def test_sessions_list_and_transcript_route(tmpdb, tmp_path):
 
 
 def test_pace_setting_default_and_validation(tmpdb):
-    assert db.settings()["pace"]["pct_per_day"] == 15.0
+    assert db.settings()["pace"]["pct_per_day"] == 14.4
     assert api.validate_setting("pace", {"pct_per_day": 15}) is None
     assert api.validate_setting("pace", {"pct_per_day": 50}) and api.validate_setting("pace", {"pct_per_day": "x"})
     src = type("S", (), {"get": lambda self: snap()})()

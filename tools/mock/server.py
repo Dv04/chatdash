@@ -24,7 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 UI = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "dhi_orbit", "ui")
 TOKEN = "mock"
 STATE = {"scenario": "normal", "answers": [], "settings": {"focus": {"on": False, "min_age_min": 15, "windows": ["10:00", "14:00"]},
-                                                           "modes": [], "keepwarm": {"available": False}, "pace": {"pct_per_day": 15.0}}}
+                                                           "modes": [], "keepwarm": {"available": False}, "pace": {"pct_per_day": 14.4}}}
 SEATS = ["main", "alpha", "work", "beta", "delta", "echo", "gamma"]
 WIS = [("PROJ-02", "Outreach campaign"), ("PROJ-06", "Edge device ops"), ("PROJ-08", "Research writeup"), ("PROJ-10", "Repos and code review"),
        ("PROJ-12", "Agent fleet and cost"), ("PROJ-14", "Dashboard and alerts"), ("PROJ-16", "Integration work")]

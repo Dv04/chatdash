@@ -164,9 +164,9 @@ export async function renderSessions(el, ui) {
   const ov = (ui.overview && ui.overview()) || await get("overview").catch(() => null);   // a cold load of this page paints before the feed has arrived
   const atLimit = seatsAtLimit(ov, ui.graphData && ui.graphData());
   const rows = show.map((s) => h("tr", {},
-    h("td", {}, h("span", { class: "st " + (limitWord(s, atLimit) ? "limited" : s.state), "aria-hidden": "true" }), " ", limitWord(s, atLimit) || (s.live ? s.state.replace("_", " ") : "not running")),
+    h("td", {}, h("span", { class: "st " + (limitWord(s, atLimit) ? "limited" : s.state), "aria-hidden": "true" }), " ", limitWord(s, atLimit) || (s.live || s.provider ? s.state.replace("_", " ") : "not running")),
     h("td", { class: "nm" }, h("a", { href: "#/chat/" + encodeURIComponent(s.session_id) }, s.name)),
-    h("td", {}, s.seat, s.excluded && h("span", { class: "hint" }, " (ro)")),
+    h("td", {}, s.provider_label || s.seat, s.excluded && h("span", { class: "hint" }, " (ro)")),
     h("td", {}, s.work_item || ""),
     h("td", { class: "num" }, s.activity ? age(Date.now() / 1000 - s.activity) : "?"),
     h("td", {}, s.cache_age_min == null ? "" : `${s.warmth || ""} ${Math.round(s.cache_age_min)}m`),

@@ -247,7 +247,8 @@ class Sources:
         else:
             chats = [dict(c) for c in chats]
         for c in chats:
-            c["banner"] = self._banner(c["path"], c.get("version")) if c["kind"] != "headless" else None
+            c["banner"] = (self._banner(c["path"], c.get("version"))
+                           if c["kind"] != "headless" and not c.get("provider") else None)   # limit banners are a Claude Code transcript thing
             c["excluded"] = excluded(c["config"])
         try:
             jobs = jobs_all(now - self.window_s)
@@ -296,6 +297,11 @@ class Sources:
                 "state": state, "resume_at": resume_at, "resume_at_ct": limits.fmt_clock(resume_at),
                 "queued": [{"session_id": c["session_id"], "name": c["name"],
                             "resets_at": c["banner"]["resets_at"]} for c in stalled]})
+        try:
+            from .. import providers
+            seats += providers.seats(chats)       # Codex and Cursor appear as seats with unknown limits (no usage meter)
+        except Exception as e:
+            errors["providers"] = f"{type(e).__name__}: {e}"
         snap = {"at": now, "chats": chats, "jobs": jobs, "seats": seats, "fleet": fleet, "errors": errors}
         with self.lock:
             self.snap = snap

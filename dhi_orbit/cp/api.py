@@ -522,7 +522,7 @@ def _session_row(c: dict, now: float, prefs: dict | None = None) -> dict:
             "activity": c.get("activity"), "warmth": c.get("warmth"), "cache_age_min": c.get("cache_age_min"),
             "kw": c.get("kw"), "excluded": c["excluded"], "job_id": c.get("job_id"),
             "limited": bool(c.get("banner")), "final": (c.get("final") or "")[-300:], "final_at": c.get("final_at"),
-            "units_today": c.get("units_today")}
+            "units_today": c.get("units_today"), "provider": c.get("provider"), "provider_label": c.get("provider_label")}
 
 
 def sessions_list(snap: dict, now: float) -> list[dict]:

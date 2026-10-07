@@ -179,7 +179,7 @@ class State:
                 continue
             del self.queue[key]
             def run(c=c, text=text):
-                res = self.record("queued reply", c["key"], actions.reply(c, text))
+                res = self.record("queued reply", c["key"], actions.reply(c, text, manual=True))
                 if self.notify:
                     actions.notify("Queued reply " + ("sent" if res.get("ok") else "FAILED"),
                                    f"{c['name'][:40]}: {res.get('error') or text[:80]}")
@@ -428,7 +428,7 @@ def make_handler(st: State, token: str, port: int):
                      "/api/queue") and not chat:
                 return self._send(404, {"error": "no such chat"})
             if p == "/api/reply":
-                return self._send(200, st.record("reply", chat["key"], actions.reply(chat, body.get("text", ""))))
+                return self._send(200, st.record("reply", chat["key"], actions.reply(chat, body.get("text", ""), manual=True)))
             if p == "/api/queue":
                 text = (body.get("text") or "").strip()
                 if text:

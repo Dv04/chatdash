@@ -308,7 +308,7 @@ These are the versions run before each release. Use them for the smoothest exper
 |---|---|---|
 | macOS | 27.0 (Apple Silicon), Python 3.12 and 3.14 | the full test suite, daily use |
 | Windows | 11 build 26100 (ARM64 virtual machine, x64 Python 3.12), with and without Git for Windows | the 14 end-to-end checks (real ConPTY, real `claude.exe`) and the full test suite: 271 passed, 10 skipped (POSIX-only tests) |
-| Linux | Ubuntu 22.04.5 LTS (x86_64, kernel 6.8), Python 3.10.12 | the full test suite (312 passed) and `dhi-orbit --help` from a fresh virtual environment; no live Claude Code session was run there |
+| Linux | Ubuntu 22.04.5 LTS (x86_64, kernel 6.8), Python 3.10.12 | the full test suite (313 passed) and `dhi-orbit --help` from a fresh virtual environment; no live Claude Code session was run there |
 | Gemini CLI, Antigravity (`agy`) | 0.63.0, 1.3.1 | the readers against the tools' own source and a real `agy` 1.3.1 conversation (list, transcript, reply) on macOS; not run on Windows or Linux with a real install, and Gemini CLI not run with a signed-in chat |
 | Claude Code | 2.1.292 | `claude agents --json`, `claude --version`, the board and replies up to the sign-in step |
 

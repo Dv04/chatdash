@@ -100,6 +100,8 @@ export function initNebula(ui) {
     [["#/sky", "sky", "Sky"], ["#/", "board", "Board"], ["#/graph", "graph", "Graph"], ["#/sessions", "chats", "Chats"], ["#/settings", "settings", "Settings"]]
       .map(([href, id, label]) => h("a", { href, dataset: { view: id } }, glyph(id), h("span", {}, label))));
   document.body.append(capsule);
+  // DHI Orbit mark, top left on every view (the Sky view hides the rail, so it cannot live there); a click goes to the Sky.
+  document.body.append(h("a", { class: "nb-brand", href: "#/sky", "aria-label": "DHI Orbit, Sky", title: "DHI Orbit" }, h("img", { src: "icon-180.png", alt: "", width: 44, height: 44 })));
 
   // Actions ornament on the centre window's bottom edge. Dismiss acts on the selected question (j/k or a click).
   const orn = h("div", { class: "nb-orn", role: "toolbar", "aria-label": "Board actions" },

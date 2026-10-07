@@ -305,6 +305,11 @@ function render() {
 
 // ------------------------------------------------------------------ tab title + favicon
 let lastBadge = "";
+// The tab icon is the Orbit logo; a count (red) or a "?" (amber) is drawn over its lower right corner only when something needs attention.
+const LOGO = new Image();
+let logoReady = false;
+LOGO.onload = () => { logoReady = true; lastBadge = ""; if (overview.data) badge(overview.data); };
+LOGO.src = "icon-180.png";
 function badge(ov) {
   const hl = healthOf(ov, overview);
   const n = ov ? splitNeeds(ov).now.length : 0;   // parked chats (seat at a limit) are not counted
@@ -318,12 +323,16 @@ function badge(ov) {
   c.width = c.height = 64;
   const g = c.getContext("2d");
   const css = getComputedStyle(document.documentElement);
-  g.fillStyle = !hl.ok ? css.getPropertyValue("--warn") : n ? css.getPropertyValue("--bad") : css.getPropertyValue("--ink-3");
-  g.beginPath(); g.arc(32, 32, 30, 0, Math.PI * 2); g.fill();
-  g.fillStyle = "#fff";
-  g.font = "bold 34px -apple-system, system-ui, sans-serif";
-  g.textAlign = "center"; g.textBaseline = "middle";
-  g.fillText(!hl.ok ? "?" : n > 99 ? "99" : String(n), 32, 35);
+  if (logoReady) g.drawImage(LOGO, 0, 0, 64, 64);
+  if (!logoReady || n || !hl.ok) {
+    const r = logoReady ? 19 : 30, cx = logoReady ? 45 : 32, cy = logoReady ? 45 : 32;
+    g.fillStyle = !hl.ok ? css.getPropertyValue("--warn") : n ? css.getPropertyValue("--bad") : css.getPropertyValue("--ink-3");
+    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+    g.fillStyle = "#fff";
+    g.font = `bold ${logoReady ? 24 : 34}px -apple-system, system-ui, sans-serif`;
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(!hl.ok ? "?" : n > 99 ? "99" : String(n), cx, cy + (logoReady ? 2 : 3));
+  }
   document.getElementById("favicon").href = c.toDataURL("image/png");
 }
 

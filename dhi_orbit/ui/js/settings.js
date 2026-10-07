@@ -82,7 +82,7 @@ export async function renderSettings(el, ui) {
     h("section", { class: "group" }, h("h3", {}, "Weekly pace"),
       h("ul", { class: "set-list" }, h("li", { class: "set-row" },
         h("div", { class: "set-text" }, h("h3", {}, "Target use per day", h("span", { class: "chip" }, `${(s.pace || {}).pct_per_day}%`)),
-          h("p", { class: "hint" }, "Share of the 7-day limit unlocked each day, in 8 hour blocks: 15% is 5% every 8 h, open from the start of the week (capped at 100%). ",
+          h("p", { class: "hint" }, "Share of the 7-day limit unlocked each day, in 8 hour blocks: 14.4% is 4.8% every 8 h, open from the start of the week (capped at 100%). ",
             "Capacity shows what each seat has unlocked and lists the seats with room as use first.")),
         paceEditor(s, redraw, ui)))),
     h("section", { class: "group" }, h("h3", {}, "Look"),

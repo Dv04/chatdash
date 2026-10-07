@@ -323,7 +323,7 @@ export class Sky {
       return h("div", { class: "sky-win" }, h("span", { class: "k" }, lbl), h("b", {}, k.pct == null ? "?" : `${Math.round(k.pct)}%`),
         h("span", {}, k.pct == null ? (k.since_reset ? "reset since the last reading" : "no reading") : k.resets_at ? `resets ${ct(k.resets_at, true)} (in ${age(k.resets_at - now)})` : ""));
     };
-    const p = row.seven_day ? pace(row, now, (this.ui.pace && this.ui.pace.pct_per_day) || 15) : { state: "unknown" };
+    const p = row.seven_day ? pace(row, now, (this.ui.pace && this.ui.pace.pct_per_day) || 14.4) : { state: "unknown" };
     const chats = s.chats.map((c) => {
       const it = c.needs && this.itemFor(c.id);
       const full = row.state === "blocked" && (c.state === "working" || c.needs);   // seat at its limit: the chat cannot progress

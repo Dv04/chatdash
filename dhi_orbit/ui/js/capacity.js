@@ -11,7 +11,7 @@ function s(tag, attrs = {}, ...kids) {
 }
 
 // Weekly pace : the 7-day limit unlocks in blocks of BLOCK_H hours, each worth perDay*BLOCK_H/24 %
-// (15% a day = 5% per 8 h). The first block is open the moment the window starts, so a fresh seat shows 5% to use now,
+// (14.4% a day = 4.8% per 8 h). The first block is open the moment the window starts, so a fresh seat shows 5% to use now,
 // 20% one day in, and so on, capped at 100%. "Available" = unlocked so far minus what the meter says is used; it is
 // negative when a seat is ahead of the unlocks. Read from the meter only; a reading taken before its own 7d reset is
 // unknown, never guessed.
@@ -70,7 +70,7 @@ export function renderCapacity(el, ov, ui) {
   const now = Date.now() / 1000;
   // Nearest 7-day reset first: spend from the seats whose week ends soonest.
   const seats = ov && ov.capacity ? [...ov.capacity.seats].sort((a, b) => next7d(a, now) - next7d(b, now) || a.seat.localeCompare(b.seat)) : null;
-  const perDay = (ui.pace && ui.pace.pct_per_day) || 15;
+  const perDay = (ui.pace && ui.pace.pct_per_day) || 14.4;
   const paces = new Map((seats || []).map((x) => [x.seat, pace(x, now, perDay)]));
   const useFirst = (seats || []).filter((x) => !x.excluded && paces.get(x.seat).state === "use").sort((a, b) => paces.get(b.seat).extra - paces.get(a.seat).extra);
   const head = h("div", { class: "section-head" }, h("h2", {}, "Capacity"),

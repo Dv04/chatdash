@@ -49,7 +49,7 @@ function why(s) {
 // Continue a parked chat on another seat. Candidates: seats the board may start chats on (not read-only, not
 // blocked or unknown, not the chat's own seat). Order: "ok" before "near" (a near seat queues the chat until it
 // frees), then most spare 7-day headroom for the time left to its reset (capacity.js pace().extra).
-export function continueSeats(x, seats, perDay = 15, now = Date.now() / 1000) {
+export function continueSeats(x, seats, perDay = 14.4, now = Date.now() / 1000) {
   return [...seats.values()]
     .filter((s) => !s.excluded && s.seat !== x.seat && (s.state === "ok" || s.state === "near"))
     .map((s) => { const p = pace(s, now, perDay); return { s, spare: p.state === "unknown" ? null : p.extra, left: p.left }; })
@@ -89,7 +89,7 @@ function parkedLine(parked, seats, ui) {
     if (!parked.some((x) => x.session_id === q.session_id) && cont[q.session_id] !== q.resets_at)
       stalled.push({ id: `limit:${s.seat}:${q.session_id}`, kind: "limit", session_id: q.session_id, seat: s.seat, title: q.name, since: q.resets_at, resets_at: q.resets_at });
   if (!parked.length && !stalled.length) { parkedNode = null; return null; }
-  const perDay0 = (ui.pace && ui.pace.pct_per_day) || 15;
+  const perDay0 = (ui.pace && ui.pace.pct_per_day) || 14.4;
   const sig = JSON.stringify([parked.map((x) => [x.id, x.seat, x.title]), stalled.map((q) => [q.session_id, q.seat, q.resets_at]), [...seats.values()].map((s) => [s.seat, s.state, s.resume_at]),
     [...parked, ...stalled].map((x) => continueSeats(x, seats, perDay0).map((c) => [c.s.seat, Math.round(c.spare ?? -999)]))]);
   if (parkedNode && parkedNode.sig === sig) return parkedNode.el;
@@ -101,7 +101,7 @@ function parkedLine(parked, seats, ui) {
     const s = seats.get(seat) || {};
     return `${s.label || seat} ${n} (${why(s)}${s.resume_at ? `, back ${ct(s.resume_at)}` : ""})`;
   });
-  const perDay = (ui.pace && ui.pace.pct_per_day) || 15;
+  const perDay = (ui.pace && ui.pace.pct_per_day) || 14.4;
   const rows = [...parked, ...stalled].map((x) => {
     const cands = continueSeats(x, seats, perDay);
     const sel = h("select", { "aria-label": `Seat to continue "${x.title}" on`, disabled: !cands.length, dataset: { id: x.id } },

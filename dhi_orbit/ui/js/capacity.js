@@ -16,7 +16,8 @@ function s(tag, attrs = {}, ...kids) {
 // negative when a seat is ahead of the unlocks. Read from the meter only; a reading taken before its own 7d reset is
 // unknown, never guessed.
 export const BLOCK_H = 8;
-export const USE_MIN = 10;   // points available before a seat is worth steering work to; under that (either way) it is on pace
+export const USE_MIN = 10;   // points available before a seat is worth steering work to
+export const SLOW_MIN = 5;   // points over what is unlocked before a seat is called ahead of pace; in between it is on pace
 export function pace(x, now, perDay) {
   const w = x.seven_day || {};
   if (w.pct == null || !w.resets_at) return { state: "unknown", why: "no 7-day reading" };
@@ -28,7 +29,7 @@ export function pace(x, now, perDay) {
   const extra = expected - w.pct, nextIn = blockS - (elapsedS % blockS);
   const nextAt = expected < 100 && w.resets_at - now > nextIn ? now + nextIn : null;
   const perDayLeft = left / daysLeft;
-  const state = w.pct >= 100 ? "spent" : extra >= USE_MIN ? "use" : extra <= -USE_MIN ? "slow" : "on";
+  const state = w.pct >= 100 ? "spent" : extra >= USE_MIN ? "use" : extra <= -SLOW_MIN ? "slow" : "on";
   return { state, expected, used: w.pct, left, daysLeft, perDayLeft, extra, step, nextAt };
 }
 function paceLine(p, perDay, x) {

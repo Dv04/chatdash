@@ -271,3 +271,58 @@ def test_provider_switched_off_in_config_disappears(codex_home, cursor_home, mon
     monkeypatch.setattr(providers, "_CACHE", {})
     monkeypatch.setattr(config, "get", lambda k, *a, **kw: ["cursor"] if k == "providers_off" else None)
     assert {r["provider"] for r in providers.rows(86400)} == {"codex"}
+
+
+def _rollout(home, name, lines):
+    d = os.path.join(home, "sessions", "2026", "10", "06")
+    os.makedirs(d, exist_ok=True)
+    p = os.path.join(d, name)
+    with open(p, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(json.dumps(x) for x in lines) + "\n")
+    return p
+
+
+def _token_count(ts, p5, r5, p7, r7):
+    return {"timestamp": ts, "type": "event_msg", "payload": {"type": "token_count", "info": None, "rate_limits": {
+        "limit_id": "codex", "primary": {"used_percent": p5, "window_minutes": 300, "resets_at": r5},
+        "secondary": {"used_percent": p7, "window_minutes": 10080, "resets_at": r7}}}}
+
+
+def test_codex_limits_come_from_the_newest_rate_limits_event(tmp_path, monkeypatch):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    from dhi_orbit.providers import codex
+    assert codex.limits() is None
+    _rollout(str(tmp_path), "rollout-a.jsonl", [_token_count("2026-10-06T12:00:00.000Z", 5.0, 2000000000, 20.0, 2000500000),
+                                                 {"timestamp": "2026-10-06T12:30:00.000Z", "payload": {"type": "agent_message"}},
+                                                 _token_count("2026-10-06T13:00:00.000Z", 8.0, 2000000000, 23.0, 2000500000)])
+    lim = codex.limits()
+    assert (lim["five"], lim["seven"], lim["five_resets"]) == (8.0, 23.0, 2000000000)
+    assert lim["at"] and abs(lim["at"] - 1791291600) < 86400
+
+
+def test_codex_seat_shows_the_reading_and_never_a_stale_one_as_current(codex_home, cursor_home, monkeypatch):
+    from dhi_orbit.providers import board
+    now = 1_000_000.0
+    fresh = board.seat("codex", "Codex", [], {"five": 8.0, "five_resets": now + 3600, "seven": 23.0, "seven_resets": now + 86400,
+                                              "at": now - 120}, now)
+    assert (fresh["five_hour"]["pct"], fresh["seven_day"]["pct"], fresh["state"], fresh["meter_age_min"]) == (8, 23, "ok", 2)
+    near = board.seat("codex", "Codex", [], {"five": 85.0, "five_resets": now + 60, "seven": 10.0, "seven_resets": now + 9, "at": now}, now)
+    assert near["state"] == "near"
+    gone = board.seat("codex", "Codex", [], {"five": 99.0, "five_resets": now - 5, "seven": 50.0, "seven_resets": now - 5, "at": now - 9000}, now)
+    assert gone["five_hour"]["pct"] is None and gone["five_hour"]["since_reset"] is True and gone["state"] == "ok"
+    blocked = board.seat("codex", "Codex", [], {"five": 100.0, "five_resets": now + 500, "seven": 40.0, "seven_resets": now + 900, "at": now}, now)
+    assert blocked["state"] == "blocked" and blocked["resume_at"] == now + 500
+    none = board.seat("cursor", "Cursor", [], None, now)
+    assert none["state"] == "unknown" and none["five_hour"]["pct"] is None and none["usage_meter"] == "off"
+
+
+def test_provider_near_line_matches_the_claude_seat_line():
+    from dhi_orbit.cp import sources
+    from dhi_orbit.providers import board
+    assert board.NEAR_PCT == sources.NEAR_PCT
+
+
+def test_seats_pick_up_the_codex_reading(codex_home, cursor_home, monkeypatch):
+    _rollout(os.environ["CODEX_HOME"], "rollout-z.jsonl", [_token_count("2026-10-06T13:00:00.000Z", 8.0, 4102444800, 23.0, 4102444800)])
+    ss = {s["seat"]: s for s in providers.seats(providers.rows(86400))}
+    assert ss["codex"]["five_hour"]["pct"] == 8 and ss["codex"]["state"] == "ok" and ss["cursor"]["state"] == "unknown"

@@ -110,7 +110,19 @@ def seats(rows_: list[dict]) -> list[dict]:
     for r in rows_:
         if r.get("provider"):                 # a Claude Code row has no provider
             have.setdefault(r["provider"], r["provider_label"])
-    return [_rows.seat(pid, label, []) for pid, label in have.items()]
+    out = []
+    for pid, label in have.items():
+        mod = _modules().get(pid)
+        try:
+            lim = mod.limits() if mod and hasattr(mod, "limits") else None
+        except Exception:                       # an unreadable usage reading is "unknown", never an error on the board
+            lim = None
+        s = _rows.seat(pid, label, [], lim)
+        if s["resume_at"]:
+            from ..cp import limits as _limits
+            s["resume_at_ct"] = _limits.fmt_clock(s["resume_at"])
+        out.append(s)
+    return out
 
 
 def _turn_pairs(msgs: list[dict], fallback_ts: str | None) -> list[dict]:

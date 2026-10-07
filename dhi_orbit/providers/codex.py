@@ -188,3 +188,51 @@ def reply(cid: str, text: str) -> dict:
         return {"ok": False, "route": "refused", "error": "Codex is working on this thread right now. Reply when it is idle."}
     r = run_detached([e, "exec", "resume", "--skip-git-repo-check", cid, text], c.get("cwd") or "", None, f"codex-{cid[:8]}")
     return {**r, "route": "codex exec resume"}
+
+
+def limits() -> dict | None:
+    """The account's usage limits as Codex last reported them: every turn writes a token_count event with `rate_limits`
+    (primary = the 5 h window, secondary = the 7 d window: used_percent, window_minutes, resets_at) into its rollout
+    jsonl. The newest such event across the latest rollouts is the reading. None when no event has them (never used,
+    or an API-key login, which has no plan limits)."""
+    files = glob.glob(os.path.join(home(), "sessions", "*", "*", "*", "rollout-*.jsonl"))
+    files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    for path in files[:8]:
+        try:
+            with open(path, "rb") as fh:
+                size = os.path.getsize(path)
+                fh.seek(max(0, size - 600_000))
+                tail = fh.read().decode("utf-8", "replace").splitlines()
+        except OSError:
+            continue
+        for line in reversed(tail):
+            if '"rate_limits"' not in line or '"primary"' not in line:
+                continue
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            rl = (ev.get("payload") or {}).get("rate_limits") or {}
+            pri, sec = rl.get("primary"), rl.get("secondary")
+            if not isinstance(pri, dict) and not isinstance(sec, dict):
+                continue
+            at = _iso_epoch(ev.get("timestamp"))
+            def one(w):
+                if not isinstance(w, dict) or w.get("used_percent") is None:
+                    return None, None
+                return float(w["used_percent"]), w.get("resets_at")
+            fp, fr = one(pri)
+            sp, sr = one(sec)
+            return {"five": fp, "five_resets": fr, "seven": sp, "seven_resets": sr, "at": at,
+                    "plan": rl.get("plan_type")}
+    return None
+
+
+def _iso_epoch(ts) -> float | None:
+    if not ts:
+        return None
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None

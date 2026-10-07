@@ -287,3 +287,21 @@ def test_a_corrupt_or_unfamiliar_summaries_database_is_ignored(tmp_path, monkeyp
     os.makedirs(root)
     (root / "conversation_summaries.db").write_bytes(b"not a database")
     assert antigravity.chats(0, 5) == [] and antigravity.info()["available"] is False
+
+
+def test_antigravity_opens_a_database_whose_path_has_uri_characters(tmp_path, monkeypatch):
+    home = tmp_path / "100%real #1 a?b"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    antigravity._cache.clear()
+    old = "2026-10-06 11:00:00+00:00"
+    summaries_db(str(home / ".gemini" / "antigravity-cli"), [("c1", "T", "p", 1, old, "", "", "", 0, 0, 0, old)])
+    assert [c["id"] for c in antigravity.chats(0, 20)] == ["c1"]
+
+
+def test_run_detached_will_not_pass_shell_syntax_to_a_windows_batch_shim(tmp_path, monkeypatch):
+    monkeypatch.setattr(providers._plat, "IS_WIN", True)
+    monkeypatch.setattr(providers.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start"))
+    for text in ("a & calc", "50%PATH%", "x | y", "two\nlines", 'say "hi"'):
+        r = providers.run_detached([r"C:\Users\me\AppData\Roaming\npm\gemini.CMD", "-p", text], str(tmp_path), None, "t")
+        assert r["ok"] is False and "batch shim" in r["error"]

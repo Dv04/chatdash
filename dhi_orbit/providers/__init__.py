@@ -205,6 +205,12 @@ def run_detached(argv: list[str], cwd: str, env: dict | None, tag: str, settle_s
     """Start a command that outlives this request (a turn can take minutes) with its output in the logs folder, then
     wait `settle_s` for an early failure. Returns {ok, started|finished, log, tail}. A command that is still running after
     settle_s is reported as started: the board shows the chat working while the tool writes its turn."""
+    if _plat.IS_WIN and os.path.splitext(argv[0])[1].lower() in (".cmd", ".bat") and any(
+            re.search(r'[&|<>^%"\r\n]', a) for a in argv[1:]):
+        # npm installs terminal agents as .cmd shims, and cmd.exe re-parses the command line: a message with one of
+        # these characters would be read as shell syntax (&, |, %VAR%) or cut off (newline), so it is not sent
+        return {"ok": False, "error": f"{os.path.basename(argv[0])} is a batch shim: a message with & | < > ^ % \" or a "
+                                      "line break cannot be passed to it safely; send it from the terminal"}
     log = os.path.join(log_dir(), f"{tag}-{int(time.time())}.log")
     kw: dict = {"cwd": cwd if cwd and os.path.isdir(cwd) else os.path.expanduser("~"), "env": env,
                 "stdin": subprocess.DEVNULL}

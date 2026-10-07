@@ -189,7 +189,10 @@ def stale_cmd():
 
 
 def mtime(d):
-    return os.stat(os.path.join(d, "settings.json")).st_mtime_ns
+    """Changes whenever the file is rewritten: mtime alone does not (Linux timestamps tick every few ms), the
+    inode does, because every write replaces the file."""
+    st = os.stat(os.path.join(d, "settings.json"))
+    return st.st_mtime_ns, st.st_ino
 
 
 @POSIX_ONLY

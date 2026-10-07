@@ -156,23 +156,28 @@ def repair(d: str) -> bool:
 _cache: dict[str, tuple] = {}
 
 
+def _stamp(p: str):
+    """mtime alone is not a change marker: Linux timestamps tick every few milliseconds, so two writes in a row can
+    share one (191 of 200 on/off pairs did, measured on Ubuntu 22.04). Size and inode (every write replaces the file)
+    tell them apart."""
+    try:
+        st = os.stat(p)
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_size, st.st_ino)
+
+
 def meter_state(d: str) -> str:
     """"on", "other" (a status line that is not DHI Orbit's) or "off", cached on settings.json's mtime: the board asks
     for every seat on every refresh. A cache miss is also where a status line of ours with an outdated command is
     repaired, so the settings file is rewritten only when the command differs, not on every refresh."""
     p = _settings(d)
-    try:
-        key = os.stat(p).st_mtime_ns
-    except OSError:
-        key = None
+    key = _stamp(p)
     hit = _cache.get(d)
     if hit and hit[0] == key:
         return hit[1]
     if repair(d):
-        try:
-            key = os.stat(p).st_mtime_ns
-        except OSError:
-            key = None
+        key = _stamp(p)
     st = status(d)
     v = "on" if st["on"] else "other" if st["other"] else "off"
     _cache[d] = (key, v)

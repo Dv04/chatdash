@@ -15,6 +15,7 @@ captures (no signed-in conversation was available to read). Anything this does n
 from __future__ import annotations
 
 import glob
+import pathlib
 import json
 import os
 import re
@@ -69,7 +70,7 @@ def _summaries(root: str) -> list[dict]:
     if not os.path.isfile(p):
         return []
     try:
-        con = sqlite3.connect("file:" + p.replace("\\", "/").replace("?", "%3f").replace("#", "%23") + "?mode=ro", uri=True, timeout=2)
+        con = sqlite3.connect(pathlib.Path(p).absolute().as_uri() + "?mode=ro", uri=True, timeout=2)
     except sqlite3.Error:
         return []
     out = []

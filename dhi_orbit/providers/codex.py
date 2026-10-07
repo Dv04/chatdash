@@ -102,8 +102,8 @@ def _row_to_chat(r: dict, turn: dict | None, hist) -> dict:
                 row = hist.execute("SELECT item_json FROM thread_items WHERE thread_id=? AND item_type='agentMessage' "
                                    "ORDER BY rollout_ordinal DESC LIMIT 1", (cid,)).fetchone()
                 final = _text_of(row[0]) if row else ""
-    name = (r.get("name") or r.get("title") or r.get("first_user_message")
-            or f"{os.path.basename((r.get('cwd') or '').rstrip('/\\')) or 'Codex'} thread {cid[:6]}")
+    base = os.path.basename((r.get("cwd") or "").rstrip("/\\")) or "Codex"
+    name = r.get("name") or r.get("title") or r.get("first_user_message") or f"{base} thread {cid[:6]}"
     return {"key": f"codex:{cid}", "provider": "codex", "id": cid, "name": clip(name.replace("\n", " "), 90),
             "cwd": r.get("cwd"), "state": state, "error": err, "updated_at": upd,
             "created_at": (r.get("created_at_ms") or (r.get("created_at") or 0) * 1000) / 1000,

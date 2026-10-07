@@ -150,12 +150,21 @@ def type_into_attach(cfg: str, job_id: str, text: str, cwd: str | None,
     pty = _spawn_attach(cfg, job_id, cwd)
     screen = b""
     try:
-        screen = _drain_until(pty, _input_ready, 6)
+        screen = _drain_until(pty, _input_ready, 10 if _plat.IS_WIN else 6)       # ConPTY starts slower
         pty.write(PASTE_START + text.encode() + PASTE_END)
         later: list = []
         later.append(_drain(pty, 0.4))
+        sent = text                                  # what lands in the transcript (a plain retype joins the lines)
+        if _plat.IS_WIN and b"[200~" in b"".join(later):
+            # The terminal layer did not understand the bracketed-paste markers and typed them into the prompt as text. Clear the
+            # line (Ctrl+U) and type the message plainly: a new line cannot be typed (it would submit), so lines are joined.
+            pty.write(b"\x15")
+            _drain(pty, 0.2)
+            sent = " ".join(text.replace("\r", "").split("\n"))
+            pty.write(sent.encode())
+            later.append(_drain(pty, 0.4))
         pty.write(b"\r")
-        landed = _transcript_has(transcript, text, size0, confirm_s, pty, later) if transcript else None
+        landed = _transcript_has(transcript, sent, size0, confirm_s, pty, later) if transcript else None
         _drain(pty, 0.2)
         screen += b"".join(later)
     except OSError as e:                     # attach already exited (job gone or stopped): the pty is closed
@@ -167,7 +176,7 @@ def type_into_attach(cfg: str, job_id: str, text: str, cwd: str | None,
         # Seen 2026-10-05 (2 of about 60 sends, not reproduced since): Enter pressed in the last half second of the
         # previous turn was neither submitted nor queued, and the message landed the moment the attach client
         # closed. Look once more after closing, so a delivered message is not reported as failed (and resent).
-        landed = _transcript_has(transcript, text, size0, 3.0)
+        landed = _transcript_has(transcript, sent, size0, 3.0)
         if landed:
             return {"ok": True, "route": "attach", "queued": landed == "queued", "confirmed": landed is True,
                     "late": True}
@@ -316,16 +325,51 @@ def shim_problem(text: str) -> str | None:
     return None
 
 
+def claude_error(text: str) -> str:
+    """The last of what `claude` printed, with the known failures turned into what to do about them."""
+    t = (text or "").strip()[-500:]
+    low = t.lower()
+    if "not trusted" in low:
+        return ("Claude Code does not trust this folder yet. Open `claude` once in it, accept the trust question, then reply again. "
+                "(" + t[-160:] + ")")
+    if "no conversation found" in low or "nothing to resume" in low:
+        return "Claude Code no longer has this conversation (its transcript was cleaned up), so it cannot be resumed. (" + t[-160:] + ")"
+    return t or "claude printed nothing"
+
+
+def _workdir(cwd: str | None) -> str:
+    """A folder that exists to run claude in: the chat's own, else the configured default, else home (a chat's folder may be gone or
+    on a drive that is not mounted; subprocess raises on a missing cwd)."""
+    for d in (cwd, config.default_cwd(), os.path.expanduser("~")):
+        if d and os.path.isdir(d):
+            return d
+    return os.getcwd()
+
+
+def _run_claude(argv: list[str], cfg: str, cwd: str | None, timeout: int = 60):
+    """(CompletedProcess or None, error text or None). Never raises: a missing binary, a bad folder or a hang is an answer."""
+    try:
+        p = subprocess.run(argv, cwd=_workdir(cwd), env=_env(cfg), capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=timeout, stdin=subprocess.DEVNULL)
+        return p, None
+    except subprocess.TimeoutExpired:
+        return None, (f"claude did not answer within {timeout} s. It may be waiting on a question (for example the folder trust "
+                      "prompt): run `claude` once in this chat's folder, then try again.")
+    except OSError as e:
+        return None, f"could not run claude ({os.path.basename(argv[0])}): {e.strerror or e}"
+
+
 def resume_bg(cfg: str, session_id: str, text: str, cwd: str | None) -> dict:
     bad = shim_problem(text)
     if bad:
         return {"ok": False, "route": "resume-bg", "error": bad}
-    p = subprocess.run([CLAUDE, "--resume", session_id, "--bg", text], cwd=cwd or config.default_cwd(),
-                       env=_env(cfg), capture_output=True, text=True, timeout=60)
+    p, err = _run_claude([CLAUDE, "--resume", session_id, "--bg", text], cfg, cwd)
+    if err:
+        return {"ok": False, "route": "resume-bg", "error": err}
     import re
     m = re.search(r"attach ([0-9a-f]{8})", p.stdout + p.stderr)
     if p.returncode != 0 or not m:
-        return {"ok": False, "route": "resume-bg", "error": (p.stderr or p.stdout)[-400:]}
+        return {"ok": False, "route": "resume-bg", "error": claude_error(p.stderr or p.stdout)}
     return {"ok": True, "route": "resume-bg", "new_job": m.group(1),
             "note": "resumed as a background copy (new id); the first reply re-caches the chat once"}
 
@@ -359,20 +403,22 @@ def new_chat(cfg: str, name: str, text: str, cwd: str) -> dict:
     bad = shim_problem(text + name)
     if bad:
         return {"ok": False, "error": bad}
-    p = subprocess.run([CLAUDE, "--bg", "-n", name, text], cwd=cwd, env=_env(cfg),
-                       capture_output=True, text=True, timeout=60)
+    p, err = _run_claude([CLAUDE, "--bg", "-n", name, text], cfg, cwd)
+    if err:
+        return {"ok": False, "error": err}
     import re
     m = re.search(r"attach ([0-9a-f]{8})", p.stdout + p.stderr)
     if not m:
-        return {"ok": False, "error": (p.stderr or p.stdout)[-400:]}
+        return {"ok": False, "error": claude_error(p.stderr or p.stdout)}
     return {"ok": True, "job_id": m.group(1)}
 
 
 def stop(chat: dict) -> dict:
     if not chat.get("job_id"):
         return {"ok": False, "error": "not a background session"}
-    p = subprocess.run([CLAUDE, "stop", chat["job_id"]], env=_env(chat["config"]),
-                       capture_output=True, text=True, timeout=45)
+    p, err = _run_claude([CLAUDE, "stop", chat["job_id"]], chat["config"], None, timeout=45)
+    if err:
+        return {"ok": False, "error": err}
     return {"ok": p.returncode == 0, "out": (p.stdout + p.stderr)[-200:]}
 
 

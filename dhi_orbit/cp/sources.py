@@ -145,7 +145,7 @@ def jobs_all(since: float) -> list[dict]:
     for cfg in collector.config_dirs():
         for f in glob.glob(os.path.join(cfg, "jobs", "*", "state.json")):
             try:
-                d = json.load(open(f, encoding="utf-8"))
+                d = json.load(open(f, encoding="utf-8-sig"))
             except (OSError, ValueError):
                 continue
             upd = iso_epoch(d.get("updatedAt")) or os.path.getmtime(f)

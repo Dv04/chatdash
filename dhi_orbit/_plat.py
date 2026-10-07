@@ -28,6 +28,20 @@ else:
     import termios
 
 
+# ------------------------------------------------------------------ files
+def replace(src: str, dst: str, tries: int = 8) -> None:
+    """os.replace that waits out a Windows sharing violation: an antivirus scan or another reader holding the target open makes
+    the rename fail with PermissionError for a moment. POSIX never needs the retry."""
+    for i in range(tries):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if not IS_WIN or i == tries - 1:
+                raise
+            time.sleep(0.05 * (i + 1))
+
+
 # ------------------------------------------------------------------ paths
 _DRIVE = re.compile(r"^[A-Za-z]:[\\/]")
 
@@ -72,6 +86,40 @@ def pid_alive(pid: int) -> bool:
     except OSError:
         return False
     return True
+
+
+def process_start(pid: int) -> float | None:
+    """When the process with this pid started (epoch seconds), or None when unknown. Windows only: lets a stale
+    sessions/<pid>.json whose pid was reused by another program be told apart from a live Claude Code."""
+    if not IS_WIN or pid <= 0:
+        return None
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.OpenProcess.restype = wintypes.HANDLE
+    k32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    k32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    h = k32.OpenProcess(0x1000, False, pid)
+    if not h:
+        return None
+    try:
+        c, e, k, u = (wintypes.FILETIME() for _ in range(4))
+        if not k32.GetProcessTimes(h, ctypes.byref(c), ctypes.byref(e), ctypes.byref(k), ctypes.byref(u)):
+            return None
+        ticks = (c.dwHighDateTime << 32) | c.dwLowDateTime            # 100 ns since 1601-01-01
+        return ticks / 1e7 - 11644473600
+    finally:
+        k32.CloseHandle(h)
+
+
+def reused_pid(pid: int, started_at_ms: float | None, slack_s: float = 120.0) -> bool:
+    """True when the process now holding this pid started after the session record was written: it cannot be the same Claude Code.
+    (The reverse is not checked: a session started later in a long-lived process, after /clear, legitimately post-dates it.)"""
+    if not started_at_ms:
+        return False
+    t = process_start(pid)
+    return t is not None and t > started_at_ms / 1000 + slack_s
 
 
 def all_running_pids() -> set[int]:

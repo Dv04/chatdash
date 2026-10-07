@@ -65,7 +65,7 @@ def call_model(config: str, items: list[dict], runner=subprocess.run, prompt: st
     with tempfile.TemporaryDirectory() as cwd:
         p = runner([CLAUDE, "-p", body, "--model", "sonnet", "--tools", "", "--setting-sources", "project",
                     "--no-session-persistence", "--output-format", "json"], cwd=cwd, env=env,
-                   capture_output=True, text=True, timeout=300)
+                   capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
     meta = json.loads(p.stdout or "{}")
     text = meta.get("result") or ""
     start, end = text.find("["), text.rfind("]")

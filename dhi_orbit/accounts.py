@@ -96,7 +96,7 @@ def auth_status(d: str) -> dict:
     """`claude auth status --json` for a dir: {"signed_in", "method", "plan", "email", "org"} or an error."""
     try:
         p = subprocess.run([config.claude_bin(), "auth", "status", "--json"], env=_env(d), capture_output=True,
-                           text=True, timeout=20, stdin=subprocess.DEVNULL)
+                           text=True, encoding="utf-8", errors="replace", timeout=20, stdin=subprocess.DEVNULL)
         j = json.loads(p.stdout or "{}")
     except (OSError, subprocess.TimeoutExpired, ValueError) as e:
         return {"signed_in": None, "error": f"{type(e).__name__}: {e}"[:200]}
@@ -141,7 +141,7 @@ def _save(key: str, value) -> None:
     tmp = p + ".tmp"
     with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _plat.O_BIN, 0o600), "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, sort_keys=True)
-    os.replace(tmp, p)
+    _plat.replace(tmp, p)
 
 
 def _paused() -> set[str]:
@@ -187,7 +187,7 @@ def delete(name: str, confirm: str) -> dict:
         return {"ok": False, "error": "a chat on this account is still running; stop it first"}
     cancel(name)
     try:
-        subprocess.run([config.claude_bin(), "auth", "logout"], env=_env(d), capture_output=True, text=True,
+        subprocess.run([config.claude_bin(), "auth", "logout"], env=_env(d), capture_output=True, text=True, encoding="utf-8", errors="replace",
                        timeout=30, stdin=subprocess.DEVNULL)
     except (OSError, subprocess.TimeoutExpired):
         pass

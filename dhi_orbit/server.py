@@ -32,7 +32,7 @@ def load_public() -> dict:
     {"host", "key_login", "team_domain", "emails": [...]}; "host" falls back to config.json public_url.
     With neither, only 127.0.0.1 and localhost are accepted."""
     try:
-        pub = json.load(open(config.public_path(), encoding="utf-8"))
+        pub = json.load(open(config.public_path(), encoding="utf-8-sig"))
         pub = pub if isinstance(pub, dict) else {}
     except (OSError, ValueError):
         pub = {}
@@ -526,6 +526,7 @@ def main() -> None:
     ap.add_argument("--window-hours", type=float, default=24)
     ap.add_argument("--every", type=float, default=1.5, help="refresh seconds (a snapshot costs about 0.1 s)")
     ap.add_argument("--no-notify", action="store_true")
+    ap.add_argument("--open", action="store_true", help="open the dashboard in your browser")
     a = ap.parse_args()
     if _plat.IS_WIN:                       # a Windows console defaults to cp1252: chat names and arrows must not crash print
         for st_ in (sys.stdout, sys.stderr):
@@ -541,7 +542,18 @@ def main() -> None:
     ThreadingHTTPServer.request_queue_size = 128   # the default of 5 resets a browser's parallel module fetches
     srv = QuietServer(("127.0.0.1", a.port), make_handler(st, token, a.port))
     print(f"DHI Orbit on http://127.0.0.1:{a.port}/  ({len(st.chats)} chats, data dir {config.home()})", flush=True)
-    srv.serve_forever()
+    if a.open:
+        import webbrowser
+        try:
+            webbrowser.open(f"http://127.0.0.1:{a.port}/")
+        except Exception:
+            pass
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:                    # Ctrl+C is the normal way to stop it, not an error with a traceback
+        print("DHI Orbit stopped", flush=True)
+    finally:
+        srv.server_close()
 
 
 if __name__ == "__main__":

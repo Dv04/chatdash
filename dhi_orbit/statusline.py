@@ -13,7 +13,7 @@ import time
 
 
 def record(doc: dict, env=os.environ) -> None:
-    from . import config
+    from . import _plat, config
     limits = doc.get("rate_limits")
     if not isinstance(limits, dict) or not limits:
         return
@@ -23,7 +23,7 @@ def record(doc: dict, env=os.environ) -> None:
     blob = json.dumps(limits, separators=(",", ":"), sort_keys=True)
     state_path = log + ".state"
     try:
-        with open(state_path, encoding="utf-8") as fh:
+        with open(state_path, encoding="utf-8-sig") as fh:
             state = json.load(fh)
     except (OSError, ValueError):
         state = {}
@@ -36,7 +36,7 @@ def record(doc: dict, env=os.environ) -> None:
     tmp = state_path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(state, fh)
-    os.replace(tmp, state_path)
+    _plat.replace(tmp, state_path)
 
 
 def short_line(doc: dict) -> str:

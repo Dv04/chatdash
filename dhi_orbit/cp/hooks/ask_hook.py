@@ -75,7 +75,7 @@ def main(stdin=sys.stdin, env=os.environ, sleep=time.sleep, clock=time.time) -> 
     if mode == "off":
         return 0
     try:
-        cfg = json.load(open(db.config_path(), encoding="utf-8"))
+        cfg = json.load(open(db.config_path(), encoding="utf-8-sig"))
     except (OSError, ValueError):
         cfg = {}
     hold_s = float(cfg.get("decision_hold_s") or 540)

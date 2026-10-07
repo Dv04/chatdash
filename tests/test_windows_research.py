@@ -85,3 +85,117 @@ def test_cmd_shim_refuses_text_cmd_exe_would_garble(monkeypatch):
 def test_chat_open_in_a_terminal_is_refused_with_the_documented_way_out():
     r = actions.reply({"kind": "interactive", "live": True, "state": "idle", "config": "/c", "session_id": "s", "job_id": None}, "hi")
     assert not r["ok"] and r["route"] == "refused" and "/bg" in r["error"]
+
+
+# ------------------------------------------------------------------ edge cases (second pass)
+def test_older_chats_are_listed_when_the_account_has_few_recent_ones(tmp_path):
+    cfg = tmp_path / ".claude"
+    (cfg / "projects" / "p").mkdir(parents=True)
+    now = time.time()
+    for i in range(14):
+        f = cfg / "projects" / "p" / f"old{i:02d}.jsonl"
+        f.write_text("{}\n")
+        os.utime(f, (now - 86400 * (3 + i), now - 86400 * (3 + i)))
+    recent = cfg / "projects" / "p" / "new.jsonl"
+    recent.write_text("{}\n")
+    got = collector.transcripts(str(cfg), now - 86400, collector.MIN_RECENT)
+    assert "new" in got and len(got) == collector.MIN_RECENT, "the newest older chats top the list up to the floor"
+    assert {"old00", "old01", "old08"} <= set(got) and "old13" not in got
+    assert len(collector.transcripts(str(cfg), now - 86400)) == 1, "without a floor only the window counts"
+
+
+def test_windows_replace_waits_out_a_sharing_violation(monkeypatch, tmp_path):
+    calls = []
+    real = os.replace
+
+    def flaky(a, b):
+        calls.append(1)
+        if len(calls) < 3:
+            raise PermissionError("in use")
+        real(a, b)
+    monkeypatch.setattr(_plat, "IS_WIN", True)
+    monkeypatch.setattr(os, "replace", flaky)
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.write_text("x")
+    _plat.replace(str(a), str(b))
+    assert b.read_text() == "x" and len(calls) == 3
+    monkeypatch.setattr(_plat, "IS_WIN", False)
+    monkeypatch.setattr(os, "replace", lambda a, b: (_ for _ in ()).throw(PermissionError("real denial")))
+    with pytest.raises(PermissionError):
+        _plat.replace(str(a), str(b))
+
+
+def test_pid_reuse_is_detected_only_when_the_process_is_younger_than_the_record(monkeypatch):
+    monkeypatch.setattr(_plat, "process_start", lambda pid: 2_000_000_000.0)
+    assert _plat.reused_pid(1, 1_000_000_000_000) is True                 # started 1e9 s after the session record: another program
+    assert _plat.reused_pid(1, 1_999_999_950_000) is False                # within the slack: the same Claude Code
+    assert _plat.reused_pid(1, None) is False
+    monkeypatch.setattr(_plat, "process_start", lambda pid: None)
+    assert _plat.reused_pid(1, 1) is False
+
+
+def test_bom_in_settings_json_is_read(tmp_path):
+    from dhi_orbit import usage_meter
+    p = tmp_path / "settings.json"
+    p.write_bytes(b"\xef\xbb\xbf" + json.dumps({"statusLine": {"type": "command", "command": "x"}}).encode())
+    assert usage_meter._load(str(p))["statusLine"]["command"] == "x"
+
+
+def test_resume_bg_survives_a_missing_folder_and_explains_known_failures(monkeypatch, tmp_path):
+    seen = {}
+
+    class P:
+        returncode, stdout, stderr = 1, "", "Error: Workspace not trusted"
+
+    def fake_run(argv, **kw):
+        seen.update(kw)
+        return P()
+    monkeypatch.setattr(actions, "CLAUDE", "claude")
+    monkeypatch.setattr(actions.subprocess, "run", fake_run)
+    r = actions.resume_bg(str(tmp_path), "sid", "hi", str(tmp_path / "gone"))
+    assert os.path.isdir(seen["cwd"]) and seen["stdin"] is not None and seen["encoding"] == "utf-8"
+    assert not r["ok"] and "does not trust this folder" in r["error"]
+    P.stderr = "No conversation found with session ID: x"
+    assert "no longer has this conversation" in actions.resume_bg(str(tmp_path), "sid", "hi", None)["error"]
+
+    def timeout(argv, **kw):
+        raise actions.subprocess.TimeoutExpired(argv, 60)
+    monkeypatch.setattr(actions.subprocess, "run", timeout)
+    assert "did not answer" in actions.resume_bg(str(tmp_path), "sid", "hi", None)["error"]
+
+    def missing(argv, **kw):
+        raise FileNotFoundError(2, "No such file")
+    monkeypatch.setattr(actions.subprocess, "run", missing)
+    assert "could not run claude" in actions.resume_bg(str(tmp_path), "sid", "hi", None)["error"]
+
+
+def test_attach_retypes_plainly_when_conpty_echoes_the_paste_markers(monkeypatch, tmp_path):
+    import threading
+    from tests.test_plat import FakeWinPty
+    mod = __import__("types").ModuleType("winpty")
+    mod.PtyProcess = FakeWinPty
+    monkeypatch.setitem(sys.modules, "winpty", mod)
+    monkeypatch.setattr(_plat, "IS_WIN", True)
+    monkeypatch.setattr(actions, "CLAUDE", "claude.exe")
+    FakeWinPty.instances.clear()
+    tr = tmp_path / "t.jsonl"
+    tr.write_text("")
+
+    def session():
+        while not FakeWinPty.instances:
+            time.sleep(0.01)
+        f = FakeWinPty.instances[0]
+        f.feed("> ")
+        while not any("\x1b[200~" in w for w in f.written):
+            time.sleep(0.01)
+        f.feed("[200~line one[201~")                      # the markers arrived as typed text
+        while not any(w == "\r" for w in f.written):
+            time.sleep(0.01)
+        with open(tr, "a", encoding="utf-8") as fh:
+            fh.write('{"type":"user","message":{"content":"line one line two"}}\n')
+    threading.Thread(target=session, daemon=True).start()
+    monkeypatch.setattr(actions, "_input_ready", lambda b: True)
+    r = actions.type_into_attach(str(tmp_path), "job12345", "line one\nline two", str(tmp_path), str(tr), confirm_s=5)
+    w = FakeWinPty.instances[0].written
+    assert r["ok"] and r["confirmed"], r
+    assert "\x15" in w and "line one line two" in w and w[-1] == "\r", w

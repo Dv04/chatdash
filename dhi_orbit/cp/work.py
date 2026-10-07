@@ -18,7 +18,7 @@ import subprocess
 import threading
 import time
 
-from .. import config
+from .. import _plat, config
 from . import db, limits, sources, workitems
 
 HOME = os.path.expanduser("~")
@@ -219,7 +219,7 @@ def write_state(wi: str, text: str, by: str) -> None:
     tmp = p + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write(text)
-    os.replace(tmp, p)
+    _plat.replace(tmp, p)
     db.execute("UPDATE work_items SET updated_at=? WHERE id=?", (time.time(), wi))
     db.log_auto("state_doc", "manual", None, None, "written", by, {"path": p, "chars": len(text)})
 
@@ -475,7 +475,7 @@ def spawn(body: dict, snap: dict, runner=subprocess.run) -> tuple[int, dict]:
 def _start(wi, seat, text, runner, cwd=None):
     cmd, cwd, env = launch_cmd(wi, seat, text, cwd)
     try:
-        r = runner(cmd, cwd=cwd, env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
+        r = runner(cmd, cwd=cwd, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL, timeout=120)
     except (OSError, subprocess.TimeoutExpired) as e:
         return 409, {"error": f"{type(e).__name__}: {e}"}
     out = (r.stdout or "") + (r.stderr or "")

@@ -130,7 +130,7 @@ def facts(turn: list[dict]) -> dict:
 
 def _git(cwd: str, *args, timeout: float = 5) -> str | None:
     try:
-        p = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except (OSError, subprocess.TimeoutExpired):
         return None
     return p.stdout if p.returncode == 0 else None

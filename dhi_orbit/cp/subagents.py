@@ -124,7 +124,7 @@ def live(chats_by_path: dict[str, dict], now: float) -> list[dict]:
         ended = ended_in_parent(parent)
         for p, mt in recent:
             try:
-                meta = json.load(open(p[:-6] + ".meta.json", encoding="utf-8"))
+                meta = json.load(open(p[:-6] + ".meta.json", encoding="utf-8-sig"))
             except (OSError, ValueError):
                 meta = {}
             if ended.get(meta.get("toolUseId")):

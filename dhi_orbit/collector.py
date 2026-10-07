@@ -105,7 +105,7 @@ def _recently_written(cfg: str, within_s: float = 1800) -> bool:
 def live_sessions(cfg: str) -> list[dict]:
     sdir = os.path.join(cfg, "sessions")
     try:
-        bridged = set(json.load(open(os.path.join(sdir, ".cc-bridge.json"), encoding="utf-8")).get("files", {}))
+        bridged = set(json.load(open(os.path.join(sdir, ".cc-bridge.json"), encoding="utf-8-sig")).get("files", {}))
     except (OSError, ValueError):
         bridged = set()
     recs = []
@@ -113,7 +113,7 @@ def live_sessions(cfg: str) -> list[dict]:
         if os.path.basename(f) in bridged:
             continue
         try:
-            d = json.load(open(f, encoding="utf-8"))
+            d = json.load(open(f, encoding="utf-8-sig"))
             d["pid"] = int(d.get("pid") or os.path.basename(f).split(".")[0])
         except (OSError, ValueError):
             continue
@@ -123,14 +123,14 @@ def live_sessions(cfg: str) -> list[dict]:
         # keep that (undocumented) registry. Ask it, through the documented command, instead of showing live chats as closed.
         return agents_json(cfg)
     alive = _alive([r["pid"] for r in recs])
-    return [r for r in recs if r["pid"] in alive]
+    return [r for r in recs if r["pid"] in alive and not _plat.reused_pid(r["pid"], r.get("startedAt"))]
 
 
 def jobs(cfg: str, since: float) -> list[dict]:
     out = []
     for f in glob.glob(os.path.join(cfg, "jobs", "*", "state.json")):
         try:
-            d = json.load(open(f, encoding="utf-8"))
+            d = json.load(open(f, encoding="utf-8-sig"))
         except (OSError, ValueError):
             continue
         d["id"] = os.path.basename(os.path.dirname(f))
@@ -142,15 +142,25 @@ def jobs(cfg: str, since: float) -> list[dict]:
     return out
 
 
-def transcripts(cfg: str, since: float) -> dict[str, str]:
-    """sessionId -> transcript path, for top-level transcripts touched since `since`."""
-    out = {}
+MIN_RECENT = 10        # an account always shows at least this many of its newest chats, however old: a first look is never empty
+
+
+def transcripts(cfg: str, since: float, min_recent: int = 0) -> dict[str, str]:
+    """sessionId -> transcript path, for top-level transcripts touched since `since`, topped up with the newest older ones
+    until `min_recent` are listed (so a user whose last chat was last week still sees their chats, on any OS)."""
+    out, older = {}, []
     for p in glob.glob(os.path.join(cfg, "projects", "*", "*.jsonl")):
         try:
-            if os.path.getmtime(p) >= since:
-                out[os.path.basename(p)[:-6]] = p
+            mt = os.path.getmtime(p)
         except OSError:
             continue
+        if mt >= since:
+            out[os.path.basename(p)[:-6]] = p
+        elif min_recent:
+            older.append((mt, p))
+    if len(out) < min_recent:
+        for _, p in sorted(older, reverse=True)[:min_recent - len(out)]:
+            out[os.path.basename(p)[:-6]] = p
     return out
 
 
@@ -196,7 +206,7 @@ class Collector:
                 sid = os.path.basename(p)[:-6] if p else j.get("sessionId")
                 if sid:
                     job_by_sid[sid] = j
-            paths = transcripts(cfg, since)
+            paths = transcripts(cfg, since, MIN_RECENT)
             for sid in set(live) | set(job_by_sid):
                 if sid not in paths:
                     j = job_by_sid.get(sid) or {}
@@ -204,7 +214,7 @@ class Collector:
                     if p:
                         paths[sid] = p
             for sid, path in paths.items():
-                if "/subagents/" in path:
+                if "/subagents/" in path.replace("\\", "/"):
                     continue
                 t = self._transcript(path)
                 rec, job = live.get(sid), job_by_sid.get(sid)
@@ -387,7 +397,7 @@ class Collector:
     def _load_pr_cache(self) -> dict[str, tuple]:
         """The last answers survive a restart: every PR used to read "unknown" for minutes after one."""
         try:
-            return {u: (float(t), st) for u, (t, st) in json.load(open(self._pr_file(), encoding="utf-8")).items()}
+            return {u: (float(t), st) for u, (t, st) in json.load(open(self._pr_file(), encoding="utf-8-sig")).items()}
         except (OSError, ValueError, TypeError):
             return {}
 
@@ -396,7 +406,7 @@ class Collector:
             os.makedirs(config.home(), exist_ok=True)
             tmp = self._pr_file() + ".tmp"
             json.dump({u: [t, st] for u, (t, st) in self._pr_cache.items()}, open(tmp, "w", encoding="utf-8"))
-            os.replace(tmp, self._pr_file())
+            _plat.replace(tmp, self._pr_file())
         except OSError:
             pass
 
@@ -413,7 +423,7 @@ class Collector:
     def _gh_state(u: str) -> str | None:
         try:
             p = subprocess.run(["gh", "pr", "view", u, "--json", "state", "-q", ".state"],
-                               capture_output=True, text=True, timeout=20)
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)
         except (OSError, subprocess.TimeoutExpired):
             return None
         out = p.stdout.strip().lower()

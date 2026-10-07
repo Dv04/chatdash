@@ -41,7 +41,7 @@ def log(msg: str) -> None:
 
 def job_name(env) -> str:
     try:
-        return json.load(open(os.path.join(env["CLAUDE_JOB_DIR"], "state.json"), encoding="utf-8")).get("name") or ""
+        return json.load(open(os.path.join(env["CLAUDE_JOB_DIR"], "state.json"), encoding="utf-8-sig")).get("name") or ""
     except (OSError, ValueError, KeyError):
         return ""
 

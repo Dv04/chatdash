@@ -49,7 +49,7 @@ def _load(path: str) -> dict:
     """settings.json as a dict; {} when missing. Raises ValueError for a file that is not a JSON object, so a
     hand-edited file is never overwritten."""
     try:
-        with open(path, encoding="utf-8") as fh:
+        with open(path, encoding="utf-8-sig") as fh:        # PowerShell and Notepad may write a BOM
             text = fh.read()
     except FileNotFoundError:
         return {}
@@ -71,7 +71,7 @@ def _write(path: str, data: dict) -> None:
     with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _plat.O_BIN, mode), "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2)
         fh.write("\n")
-    os.replace(tmp, path)
+    _plat.replace(tmp, path)
 
 
 def command() -> str:

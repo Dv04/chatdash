@@ -158,7 +158,10 @@ export async function renderSessions(el, ui) {
   try { d = await get("sessions"); } catch (e) { el.replaceChildren(h("div", { class: "page" }, h("div", { class: "empty" }, h("h3", {}, "Sessions"), h("p", {}, e.message)))); return; }
   const q = (ui.sessQ || "").toLowerCase();
   const all = d.sessions;
-  const show = all.filter((s) => (ui.sessAll || s.state !== "stopped") && (!q || [s.name, s.seat, s.work_item].some((v) => v && v.toLowerCase().includes(q))));
+  // Stopped chats are hidden to keep the list short, but when nothing else is running they ARE the list: a first look at a
+  // machine with only old chats must not read as "no chats found".
+  const hideStopped = !ui.sessAll && all.some((s) => s.state !== "stopped");
+  const show = all.filter((s) => (!hideStopped || s.state !== "stopped") && (!q || [s.name, s.seat, s.work_item].some((v) => v && v.toLowerCase().includes(q))));
   const find = h("input", { type: "search", class: "field", placeholder: "Filter by name, seat, work item", value: ui.sessQ || "", "aria-label": "Filter sessions",
     oninput: (e) => { ui.sessQ = e.target.value; renderSessions(el, ui); } });
   const ov = (ui.overview && ui.overview()) || await get("overview").catch(() => null);   // a cold load of this page paints before the feed has arrived

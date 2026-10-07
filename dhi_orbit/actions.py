@@ -316,10 +316,18 @@ def resume_bg(cfg: str, session_id: str, text: str, cwd: str | None) -> dict:
             "note": "resumed as a background copy (new id); the first reply re-caches the chat once"}
 
 
-def reply(chat: dict, text: str) -> dict:
+def reply(chat: dict, text: str, manual: bool = False) -> dict:
+    """Send text to a chat. `manual` is True only for a message the user typed on the board: automations (limit resume, idle
+    compaction, keep-warm, handoff, bulk compact) call this without it and are refused for Codex and Cursor chats, which they
+    were never built for (they drive the `claude` binary by session id)."""
     text = text.strip()
     if not text:
         return {"ok": False, "error": "empty message"}
+    if chat.get("provider"):
+        if not manual:
+            return {"ok": False, "route": "refused", "error": f"Automations do not act on {chat.get('provider_label') or chat['provider']} chats."}
+        from . import providers
+        return providers.reply(chat["provider"], chat["session_id"], text)
     if chat["kind"] == "interactive" and chat["live"]:
         return {"ok": False, "route": "refused",
                 "error": "This chat is open in a terminal tab. Text can be typed into the tab from here, but "
@@ -354,8 +362,15 @@ def stop(chat: dict) -> dict:
 def open_terminal(chat: dict) -> dict:
     """Open a terminal window attached to (or resuming) the chat: macOS Terminal, or a new console window on Windows."""
     cwd = chat.get("cwd") or config.default_cwd()
-    named = os.path.basename(chat["config"]) != ".claude"
-    tail = f"claude attach {chat['job_id']}" if chat.get("job_id") else f"claude --resume {chat['session_id']}"
+    if chat.get("provider"):
+        named = False
+        tail = {"codex": f"codex resume {chat['session_id']}", "cursor": f"cursor-agent --resume {chat['session_id']}"}.get(
+            chat["provider"], "")
+        if not tail:
+            return {"ok": False, "error": "no terminal command for this chat"}
+    else:
+        named = os.path.basename(chat["config"]) != ".claude"
+        tail = f"claude attach {chat['job_id']}" if chat.get("job_id") else f"claude --resume {chat['session_id']}"
     if _plat.IS_WIN:
         cmd = f'cd /d "{cwd}" && ' + (f'set "CLAUDE_CONFIG_DIR={chat["config"]}" && ' if named else "") + tail
         try:

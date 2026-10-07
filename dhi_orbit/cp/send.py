@@ -18,7 +18,7 @@ from .. import actions as _actions       # dhi_orbit/actions.py
 class Sender:
     def __init__(self, src, reply_fn=None):
         self.src = src
-        self.reply_fn = reply_fn or (lambda chat, text: _actions.reply(chat, text))
+        self.reply_fn = reply_fn or (lambda chat, text: _actions.reply(chat, text, manual=True))   # the user's own message
         self.queue: dict[str, dict] = {}      # session_id -> {text, at, key}
         self.lock = threading.Lock()
 

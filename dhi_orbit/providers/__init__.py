@@ -83,6 +83,72 @@ def reply(provider: str, cid: str, text: str) -> dict:
     return mod.reply(cid, text)
 
 
+def enabled() -> dict:
+    off = config.get("providers_off")
+    off = {str(x) for x in off} if isinstance(off, (list, tuple)) else set()
+    return {pid: mod for pid, mod in _modules().items() if pid not in off}
+
+
+def rows(window_s: float) -> list[dict]:
+    """Every enabled provider's chats in the window as board rows. A provider that is not installed or whose data cannot be
+    read contributes nothing (and never raises): the Claude Code chats must always show."""
+    from . import board as _rows
+    out = []
+    en = enabled()
+    for p in overview(window_s, 200):
+        if p["id"] not in en or not p.get("available"):
+            continue
+        for c in p["chats"]:
+            out.append(_rows.row(c, p["label"], config.work_item_of))
+    return out
+
+
+def seats(rows_: list[dict]) -> list[dict]:
+    """A pseudo-seat for each provider that has rows, in the shape of a Claude Code seat."""
+    from . import board as _rows
+    have = {}
+    for r in rows_:
+        have.setdefault(r["provider"], r["provider_label"])
+    return [_rows.seat(pid, label, []) for pid, label in have.items()]
+
+
+def _turn_pairs(msgs: list[dict], fallback_ts: str | None) -> list[dict]:
+    """Messages -> the {prompt, pts, final, fts, texts} turns the search index and digest read."""
+    from . import board as _rows
+    turns: list[dict] = []
+    for m in msgs:
+        ts = _rows.iso(m.get("at")) or fallback_ts
+        if m["role"] == "user":
+            turns.append({"prompt": m["text"], "pts": ts, "final": "", "fts": None, "texts": []})
+        else:
+            if not turns:
+                turns.append({"prompt": "", "pts": None, "final": "", "fts": None, "texts": []})
+            turns[-1]["texts"].append(m["text"])
+            turns[-1]["final"] = m["text"]
+            turns[-1]["fts"] = ts
+    return turns
+
+
+def _messages(path: str, limit: int = 400) -> list[dict]:
+    from . import board as _rows
+    prov, cid = _rows.split_path(path)
+    mod = _modules().get(prov)
+    return mod.turns(cid, limit) if mod else []
+
+
+def turns_for_path(path: str) -> list[dict]:
+    return _turn_pairs(_messages(path), None)
+
+
+def entries_for_path(path: str) -> list[dict]:
+    """The chat view's entries (see cp/transcript.py) for a provider chat: user and assistant messages, in order."""
+    from . import board as _rows
+    out = []
+    for i, m in enumerate(_messages(path, 600)):
+        out.append({"kind": "user" if m["role"] == "user" else "text", "ts": _rows.iso(m.get("at")), "text": m["text"], "i": i})
+    return out
+
+
 def log_dir() -> str:
     d = os.path.join(config.home(), "logs")
     os.makedirs(d, mode=0o700, exist_ok=True)

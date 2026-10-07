@@ -37,6 +37,8 @@ def workstream_of(name: str | None) -> str | None:
 
 
 def account_name(cfg: str) -> str:
+    if cfg.startswith("provider:"):                 # the pseudo config dir of a Codex or Cursor row
+        return cfg[len("provider:"):]
     b = os.path.basename(cfg)
     return "main" if b == ".claude" else b.replace(".claude-", "")
 
@@ -127,6 +129,7 @@ class Collector:
         self._live_next: dict[str, float] = {}
         self._pr_cache: dict[str, tuple] = self._load_pr_cache()
         self._pr_busy = False
+        self.provider_error = None
 
     def _transcript(self, path: str) -> Transcript:
         t = self.tr.get(path)
@@ -165,6 +168,12 @@ class Collector:
                     jsid = job.get("sessionId")
                     rec = live.get(jsid) if jsid else None
                 chats[f"{acct}:{sid}"] = self._row(cfg, acct, sid, path, t, rec, job, today)
+        try:                       # Codex and Cursor chats sit in the same list; a failure there never hides the Claude chats
+            from . import providers
+            for r in providers.rows(self.window_s):
+                chats[r["key"]] = r
+        except Exception as e:
+            self.provider_error = f"{type(e).__name__}: {e}"[:200]
         return sorted(chats.values(), key=lambda c: c["activity"] or 0, reverse=True)
 
     def _row(self, cfg, acct, sid, path, t: Transcript, rec, job, today) -> dict:
@@ -226,6 +235,10 @@ class Collector:
         }
 
     def turns(self, path: str) -> list[dict]:
+        from .providers import board as _prow
+        if _prow.is_path(path):
+            from . import providers
+            return providers.turns_for_path(path)
         return list(self._transcript(path).turns)
 
     # ------------------------------------------------------------ seats

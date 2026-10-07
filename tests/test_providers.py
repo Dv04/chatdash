@@ -199,3 +199,64 @@ def test_run_detached_reports_early_failure_and_start(tmp_path, monkeypatch):
     assert run["ok"] and run["started"]
     os.kill(run["pid"], 15)
     assert not providers.run_detached(["/no/such/binary"], str(tmp_path), None, "t")["ok"]
+
+
+# ------------------------------------------------------------------ one board: provider chats as ordinary rows
+def test_rows_have_every_field_a_claude_row_has(codex_home, cursor_home):
+    from dhi_orbit import collector
+    claude_fields = set(collector.Collector(1)._row.__code__.co_varnames) and None   # not introspectable: compare with a real row below
+    rs = providers.rows(86400)
+    assert {r["provider"] for r in rs} == {"codex", "cursor"}
+    need = ("key account config session_id job_id pid live kind state name waiting_for warmth cache_age_min cools_in_min cwd path model ttl "
+            "last_prompt last_prompt_at final final_at turns ctx_tokens idle_min units_today cold_today units_7d ws pending_tool prs "
+            "activity version").split()
+    for r in rs:
+        assert all(k in r for k in need), [k for k in need if k not in r]
+        assert r["job_id"] is None and r["pid"] is None and r["live"] is False, "no process or job: automations have nothing to drive"
+        assert r["config"].startswith("provider:") and r["path"].split(":")[0] == r["provider"]
+        assert r["final_at"] is None or r["final_at"].endswith("Z"), "ISO time, like a Claude row"
+
+
+def test_pseudo_seats_and_account_names(codex_home, cursor_home):
+    from dhi_orbit import collector
+    ss = providers.seats(providers.rows(86400))
+    assert {s["seat"] for s in ss} == {"codex", "cursor"} and all(s["state"] == "unknown" and s["five_hour"]["pct"] is None for s in ss)
+    assert collector.account_name("provider:codex") == "codex"
+
+
+def test_turns_and_entries_for_a_provider_path(codex_home):
+    from dhi_orbit.cp import transcript
+    from dhi_orbit import collector
+    tp = providers.turns_for_path("codex:idle1")
+    assert tp == [{"prompt": "question idle1", "pts": tp[0]["pts"], "final": "answer idle1", "fts": tp[0]["fts"], "texts": ["answer idle1"]}]
+    es = transcript.entries("codex:idle1")
+    assert [(e["kind"], e["text"]) for e in es] == [("user", "question idle1"), ("text", "answer idle1")]
+    assert transcript.page("codex:idle1")["total"] == 2
+    assert collector.Collector(1).turns("codex:idle1")[0]["final"] == "answer idle1"
+
+
+def test_automations_are_refused_for_provider_chats_but_a_manual_reply_goes_through(codex_home, monkeypatch):
+    from dhi_orbit import actions
+    row = next(r for r in providers.rows(86400) if r["session_id"] == "idle1")
+    monkeypatch.setattr(codex, "exe", lambda: "/bin/codex")
+    sent = []
+    monkeypatch.setattr(codex, "run_detached", lambda argv, cwd, env, tag, settle_s=6.0: sent.append(argv) or {"ok": True, "started": True})
+    auto = actions.reply(row, "/compact")                  # what idle compaction, keep-warm and handoff call
+    assert not auto["ok"] and auto["route"] == "refused" and not sent
+    manual = actions.reply(row, "next question", manual=True)
+    assert manual["ok"] and sent and sent[0][-1] == "next question"
+
+
+def test_sender_default_is_the_manual_path(codex_home, monkeypatch):
+    from dhi_orbit.cp import send
+    calls = []
+    monkeypatch.setattr(send._actions, "reply", lambda chat, text, manual=False: calls.append(manual) or {"ok": True})
+    send.Sender(object()).reply_fn({"provider": "codex"}, "hi")
+    assert calls == [True]
+
+
+def test_provider_switched_off_in_config_disappears(codex_home, cursor_home, monkeypatch):
+    from dhi_orbit import config
+    monkeypatch.setattr(providers, "_CACHE", {})
+    monkeypatch.setattr(config, "get", lambda k, *a, **kw: ["cursor"] if k == "providers_off" else None)
+    assert {r["provider"] for r in providers.rows(86400)} == {"codex"}

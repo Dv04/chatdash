@@ -20,7 +20,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import _plat, actions, collector, config, keepwarm, panels, providers
+from . import _plat, actions, collector, config, keepwarm, panels
 from .index import Index
 from .cp import mount as cp_mount  # DHI Orbit dashboard and control plane: / (also /v2/) and /api/cp/
 
@@ -179,7 +179,7 @@ class State:
                 continue
             del self.queue[key]
             def run(c=c, text=text):
-                res = self.record("queued reply", c["key"], actions.reply(c, text))
+                res = self.record("queued reply", c["key"], actions.reply(c, text, manual=True))
                 if self.notify:
                     actions.notify("Queued reply " + ("sent" if res.get("ok") else "FAILED"),
                                    f"{c['name'][:40]}: {res.get('error') or text[:80]}")
@@ -352,15 +352,6 @@ def make_handler(st: State, token: str, port: int):
                 if not c:
                     return self._send(404, {"error": "no such chat"})
                 return self._send(200, {"chat": c, "turns": st.col.turns(c["path"])[-80:]})
-            if p == "/api/ai":                       # Codex and Cursor chats: read-only here, never touched by automations
-                try:
-                    hours = max(1.0, min(24 * 90.0, float(q.get("hours", ["168"])[0])))
-                except ValueError:
-                    return self._send(400, {"error": "hours must be a number"})
-                return self._send(200, {"providers": providers.overview(hours * 3600), "now": time.time()})
-            if p == "/api/ai/chat":
-                got = providers.chat(q.get("provider", [""])[0], q.get("id", [""])[0])
-                return self._send(200, got) if got else self._send(404, {"error": "no such chat"})
             if p == "/api/search":
                 return self._send(200, {"hits": st.idx.search(q.get("q", [""])[0])})
             if p == "/api/schedules":
@@ -431,17 +422,13 @@ def make_handler(st: State, token: str, port: int):
             except ValueError:
                 return self._send(400, {"error": "bad json"})
             p = u.path
-            if p == "/api/ai/reply":
-                prov, cid = str(body.get("provider") or ""), str(body.get("id") or "")
-                text = body.get("text") if isinstance(body.get("text"), str) else ""
-                return self._send(200, st.record(f"reply ({prov})", f"{prov}:{cid}", providers.reply(prov, cid, text)))
             chat = st.by_key.get(body.get("key", ""))
             if p in ("/api/reply", "/api/stop", "/api/open", "/api/seen", "/api/unseen", "/api/permission",
                      "/api/keepwarm", "/api/keepwarm_auto", "/api/compact",
                      "/api/queue") and not chat:
                 return self._send(404, {"error": "no such chat"})
             if p == "/api/reply":
-                return self._send(200, st.record("reply", chat["key"], actions.reply(chat, body.get("text", ""))))
+                return self._send(200, st.record("reply", chat["key"], actions.reply(chat, body.get("text", ""), manual=True)))
             if p == "/api/queue":
                 text = (body.get("text") or "").strip()
                 if text:
@@ -554,7 +541,6 @@ def main() -> None:
     ThreadingHTTPServer.request_queue_size = 128   # the default of 5 resets a browser's parallel module fetches
     srv = QuietServer(("127.0.0.1", a.port), make_handler(st, token, a.port))
     print(f"DHI Orbit on http://127.0.0.1:{a.port}/  ({len(st.chats)} chats, data dir {config.home()})", flush=True)
-    print(f"Codex and Cursor chats: http://127.0.0.1:{a.port}/v2/ai.html", flush=True)
     srv.serve_forever()
 
 

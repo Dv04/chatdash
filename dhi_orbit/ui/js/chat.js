@@ -111,8 +111,8 @@ export class ChatView {
         h("h1", {}, s.name),
         h("div", { class: "who" },
           (() => { const lw = limitWord(s, seatsAtLimit(this.ui.overview && this.ui.overview(), this.ui.graphData && this.ui.graphData()));
-            return h("span", { class: "chip " + (lw ? "st-near" : "st-" + s.state) }, lw || (s.live ? s.state : "not running")); })(),
-          h("span", { class: "chip" }, s.seat),
+            return h("span", { class: "chip " + (lw ? "st-near" : "st-" + s.state) }, lw || (s.provider ? s.state : s.live ? s.state : "not running")); })(),
+          h("span", { class: "chip" }, s.provider_label || s.seat),
           s.work_item && h("a", { class: "chip wi", href: "#/work/" + encodeURIComponent(s.work_item) }, s.work_item),
           s.cache_age_min != null && h("span", { class: "chip", title: "prompt cache lives 1 h from the last call" },
             `cache ${s.warmth || "?"}, last call ${Math.round(s.cache_age_min)} min ago`),
@@ -122,17 +122,17 @@ export class ChatView {
           this.embedded && h("button", { class: "btn ghost tools-toggle", title: "Thinking and tool toggles, find, keep-warm, limit resume, terminal, stop",
             onclick: () => this.pageEl.classList.toggle("tools-open") }, "Tools"))),
       h("div", { class: "chat-tools" }, toggles, find,
-        !ro && h("button", { class: "btn", title: "One tiny ping that renews the 1 h prompt cache", onclick: () => act("keepwarm", { action: "now" }, "Keep-warm ping sent") }, "Keep warm now"),
-        !ro && h("button", { class: "btn", "aria-pressed": String(!!(kw && kw.on)), title: "Ping just before the cache expires, for 12 h",
+        !ro && !s.provider && h("button", { class: "btn", title: "One tiny ping that renews the 1 h prompt cache", onclick: () => act("keepwarm", { action: "now" }, "Keep-warm ping sent") }, "Keep warm now"),
+        !ro && !s.provider && h("button", { class: "btn", "aria-pressed": String(!!(kw && kw.on)), title: "Ping just before the cache expires, for 12 h",
           onclick: () => act("keepwarm", { action: kw && kw.on ? "off" : "on", hours: 12 }, kw && kw.on ? "Auto keep-warm off" : "Auto keep-warm on for 12 h") },
           kw && kw.on ? "Auto keep-warm: on" : "Auto keep-warm: off"),
-        resumeSeg(s, async (pref) => {
+        !s.provider && resumeSeg(s, async (pref) => {
           try { const r = await post(`sessions/${encodeURIComponent(s.session_id)}/resume_pref`, { pref }); this.session = r.session; this.render(false);
             toast(pref === "on" ? "Limit resume ON for this chat: it is resumed when its limit resets" : pref === "off" ? "Limit resume off for this chat" : `This chat follows the global setting (${s.resume.global})`); }
           catch (e) { toast(`Not changed: ${e.message}`); }
         }),
         !ro && h("button", { class: "btn ghost", onclick: () => this.ui.terminal(s) }, "Open in Terminal"),
-        !ro && s.live && h("button", { class: "btn ghost", onclick: () => this.ui.stopSession({ session_id: s.session_id, label: s.name }) }, "Stop")));
+        !ro && s.live && !s.provider && h("button", { class: "btn ghost", onclick: () => this.ui.stopSession({ session_id: s.session_id, label: s.name }) }, "Stop")));
     this.log = h("ol", { class: "chat-log", "aria-label": "Chat history" });
     // Remember what you open and close; paint() re-opens it after every rebuild (a new tool call or thinking block used to close them all).
     this.log.addEventListener("toggle", (ev) => {
@@ -185,7 +185,7 @@ export class ChatView {
     }
     this.paintAttach();
     const ta = this.box.querySelector("textarea");
-    if (ta) ta.placeholder = s.live ? (this.embedded ? "Reply (Cmd+Enter sends). While this box is empty: Up and Down switch chat, Left goes to the list" : "Reply to this chat (Cmd+Enter sends)") : "This chat is not running; a reply resumes it in the background";
+    if (ta) ta.placeholder = s.provider ? `Reply to ${s.provider_label} (Cmd+Enter sends); it continues this ${s.provider_label} thread` : s.live ? (this.embedded ? "Reply (Cmd+Enter sends). While this box is empty: Up and Down switch chat, Left goes to the list" : "Reply to this chat (Cmd+Enter sends)") : "This chat is not running; a reply resumes it in the background";
     if (!this.headSlot.contains(document.activeElement) || !this.headSlot.firstChild) this.headSlot.replaceChildren(head);
     this.moreSlot.replaceChildren(more || "");
     this.logSlot.replaceChildren(this.log,
@@ -234,7 +234,7 @@ export class ChatView {
     const rows = this.entries.filter((e) => (this.show.thinking || e.kind !== "thinking") && (this.show.tools || e.kind !== "tool") &&
       (!f || [e.text, e.summary, e.input, e.result, e.name].some((v) => v && v.toLowerCase().includes(f))));
     this.log.replaceChildren(...(rows.length ? rows.map((e) => {
-      const li = entry(e);
+      const li = entry(e, (this.session && this.session.provider_label) || "Claude");
       li.dataset.i = e.i;
       const d = li.querySelector("details");
       if (d && this.openSet.has(`${this.sid}:${e.i}`)) d.open = true;
@@ -326,11 +326,11 @@ function fmtCounts(c) {
 
 function when(ts) { const t = Date.parse(ts); return isNaN(t) ? "" : ct(t / 1000, true); }
 
-function entry(e) {
+function entry(e, who = "Claude") {
   const t = h("span", { class: "at" }, when(e.ts));
   if (e.kind === "user" && /^\s*<task-notification>/.test(e.text || "")) return taskEvent(e, t);
   if (e.kind === "user") return h("li", { class: "e user" + (e.command ? " cmd" : "") }, h("div", { class: "lbl" }, "You", t), h("div", { class: "txt" }, e.text));
-  if (e.kind === "text") return h("li", { class: "e text" }, h("div", { class: "lbl" }, "Claude", t), md(e.text, "txt md"));
+  if (e.kind === "text") return h("li", { class: "e text" }, h("div", { class: "lbl" }, who, t), md(e.text, "txt md"));
   if (e.kind === "thinking") return h("li", { class: "e thinking" },
     h("details", {}, h("summary", { class: "lbl" }, "Thinking", t, h("span", { class: "peek" }, e.redacted ? "redacted by the API" : e.text.slice(0, 140))),
       h("div", { class: "txt" }, e.redacted ? "(The API returned this thinking block encrypted; there is no text to show.)" : md(e.text, "md"))));

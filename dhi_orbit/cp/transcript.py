@@ -125,6 +125,10 @@ def _summary(name: str | None, inp: dict) -> str:
 
 
 def entries(path: str) -> list[dict]:
+    from ..providers import board as _prow
+    if _prow.is_path(path):                       # a Codex or Cursor chat: its messages, not a file
+        from .. import providers
+        return providers.entries_for_path(path)
     try:
         st = os.stat(path)
     except OSError:

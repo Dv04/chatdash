@@ -562,3 +562,12 @@ def test_mid_turn_prompts_show_in_the_transcript_once(tmp_path):
     f.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
     users = [e["text"] for e in transcript.parse(str(f)) if e["kind"] == "user"]
     assert users == ["first prompt", "typed while you were working\n[image]", "queued then replayed"]
+
+
+def test_dashboard_root_files_exist():
+    """Every file the server serves at the root (index, manifest, icons) is shipped in the UI folder."""
+    import os
+    from dhi_orbit.cp import devserver, mount
+    for f in mount.ROOT_FILES:
+        if f != "/":
+            assert devserver.ui_file(f) and os.path.getsize(devserver.ui_file(f)) > 0, f

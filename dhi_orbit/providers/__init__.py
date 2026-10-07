@@ -108,7 +108,8 @@ def seats(rows_: list[dict]) -> list[dict]:
     from . import board as _rows
     have = {}
     for r in rows_:
-        have.setdefault(r["provider"], r["provider_label"])
+        if r.get("provider"):                 # a Claude Code row has no provider
+            have.setdefault(r["provider"], r["provider_label"])
     return [_rows.seat(pid, label, []) for pid, label in have.items()]
 
 

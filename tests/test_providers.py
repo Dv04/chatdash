@@ -224,6 +224,17 @@ def test_pseudo_seats_and_account_names(codex_home, cursor_home):
     assert collector.account_name("provider:codex") == "codex"
 
 
+def test_seats_and_health_with_claude_rows_in_the_list(codex_home, cursor_home):
+    """The real board mixes Claude rows (no provider key) with provider rows: that must neither raise nor read as unknown health."""
+    from dhi_orbit.cp import api
+    claude_row = {"key": "main:abc", "account": "main", "config": "/x/.claude", "state": "idle"}
+    ss = providers.seats([claude_row] + providers.rows(86400))
+    assert {s["seat"] for s in ss} == {"codex", "cursor"}
+    snap = {"at": 1000.0, "errors": {}, "seats": ss + [{"seat": "main", "state": "ok"}]}
+    assert api.health(snap, 1001.0) == {"state": "ok", "reasons": []}
+    assert api.health({**snap, "seats": [{"seat": "main", "state": "unknown"}]}, 1001.0)["state"] == "unknown"
+
+
 def test_turns_and_entries_for_a_provider_path(codex_home):
     from dhi_orbit.cp import transcript
     from dhi_orbit import collector

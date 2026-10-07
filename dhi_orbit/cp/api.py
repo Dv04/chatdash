@@ -214,7 +214,7 @@ def health(snap: dict, now: float) -> dict:
         reasons.append("no snapshot yet")
     elif now - snap["at"] > STALE_S:
         reasons.append(f"snapshot {int(now - snap['at'])} s old")
-    unknown = [s["seat"] for s in snap["seats"] if s["state"] == "unknown"]
+    unknown = [s["seat"] for s in snap["seats"] if s["state"] == "unknown" and not s.get("provider")]   # Codex and Cursor have no usage meter by design
     if unknown:
         reasons.append("seat data unknown: " + ", ".join(unknown))
     return {"state": "ok" if not reasons else "unknown", "reasons": reasons}

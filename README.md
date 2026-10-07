@@ -257,8 +257,25 @@ which can break parts of DHI Orbit:
 - the transcripts, `<config dir>/projects/*/*.jsonl`,
 - the screen output of `claude attach` and `claude logs`, parsed to read and answer permission prompts and questions.
 
-Tested with Claude Code 2.1.289 on macOS. If something looks wrong after an update, the board may be showing stale or
-missing data; limits and health show UNKNOWN rather than OK when a source cannot be read.
+If something looks wrong after a Claude Code update, the board may be showing stale or missing data; limits and health show
+UNKNOWN rather than OK when a source cannot be read.
+
+### Suggested environments
+
+These are the versions run before each release. Use them for the smoothest experience.
+
+| System | Version we run | Checked with |
+|---|---|---|
+| macOS | 27.0 (Apple Silicon), Python 3.12 and 3.14 | the full test suite, daily use |
+| Windows | 11 build 26100 (ARM64 virtual machine, x64 Python 3.12), with and without Git for Windows | the 14 end-to-end checks (real ConPTY, real `claude.exe`) and the full test suite: 271 passed, 10 skipped (POSIX-only tests) |
+| Linux | not re-run for this release | an earlier pipx install check on Linux was reported, with no distribution or version recorded; no Linux system has been run against the current release yet |
+| Claude Code | 2.1.292 | `claude agents --json`, `claude --version`, the board and replies up to the sign-in step |
+
+Python 3.10 or newer is required.
+
+Older or other versions (macOS before 27, Windows 10 or earlier, other Linux distributions, other Python or Claude Code versions)
+may well work, but they are best effort: they are not supported, and a problem that only happens there is not investigated or
+fixed. Reports from the suggested environments come first.
 
 macOS-only parts: notifications use `osascript` there (a tray balloon on Windows, `notify-send` on Linux), opening a chat in a
 terminal works on macOS and Windows, and the Schedules panel uses `launchctl`.

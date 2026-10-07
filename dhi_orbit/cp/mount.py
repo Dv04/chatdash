@@ -97,7 +97,7 @@ def attach(st) -> Attached:
     return _ATTACHED
 
 
-ROOT_FILES = ("/", "/index.html", "/sw.js", "/manifest.webmanifest", "/icon.svg")   # the dashboard's own files, served at the root
+ROOT_FILES = ("/", "/index.html", "/sw.js", "/manifest.webmanifest", "/icon.svg", "/icon-180.png", "/icon-512.png")   # the dashboard's own files, served at the root
 ROOT_DIRS = ("/css/", "/js/")
 
 

@@ -1,3 +1,5 @@
+<p align="center"><img src="https://raw.githubusercontent.com/Dv04/dhi-orbit/main/docs/brand/orbit-lockup-dark.png" alt="DHI Orbit" width="480"></p>
+
 # DHI Orbit
 
 A local web dashboard that shows every Claude Code chat across one or more config directories on one page.

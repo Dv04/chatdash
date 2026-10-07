@@ -5,7 +5,7 @@
     <radialGradient id="o-n2" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#7FF0F2" stop-opacity="0.8"/><stop offset="1" stop-color="#20D7DB" stop-opacity="0"/></radialGradient>
     <radialGradient id="o-n3" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#E7A6FF" stop-opacity="0.7"/><stop offset="1" stop-color="#B26BFF" stop-opacity="0"/></radialGradient>
     <radialGradient id="o-star" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#FFFFFF"/><stop offset="0.35" stop-color="#FFFFFF" stop-opacity="0.9"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
-  </defs><rect width="64" height="64" rx="14" fill="url(#o-tile)"/><g filter="url(#o-soft)">
+  </defs><g filter="url(#o-soft)">
     <ellipse cx="27" cy="34" rx="17" ry="12" fill="url(#o-n1)"/>
     <ellipse cx="39" cy="28" rx="13" ry="10" fill="url(#o-n3)"/>
     <ellipse cx="33" cy="38" rx="12" ry="8" fill="url(#o-n2)"/>

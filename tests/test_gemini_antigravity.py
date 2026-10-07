@@ -2,6 +2,7 @@
 these tests pin the documented shapes, not live data)."""
 import json
 import os
+import sqlite3
 import sys
 import time
 
@@ -68,16 +69,50 @@ def test_gemini_chat_is_listed_replayed_and_named(ghome):
         ("user", "Explain the build"), ("assistant", "It uses make."), ("user", "Add a Dockerfile"), ("assistant", "Here is a Dockerfile")]
 
 
-def test_gemini_rewind_and_remove_lines_are_replayed(ghome):
+def test_gemini_rewind_drops_the_target_and_everything_after_it(ghome):
+    """Gemini CLI's own replay: $rewindTo <id> removes that message and every later one (chatRecordingService.ts)."""
     home, proj, p = ghome
     with open(p, "a", encoding="utf-8") as fh:
         fh.write(json.dumps({"$rewindTo": "m2"}) + "\n")
         fh.write(json.dumps({"id": "m6", "type": "user", "content": "A different question", "timestamp": "2026-10-06T10:08:00.000Z"}) + "\n")
-        fh.write(json.dumps({"$patch": {"removeIds": ["m1"]}}) + "\n")
     age(p, 3500)
     gemini._cache.clear()
     assert [(m["role"], m["text"]) for m in gemini.turns("aaaa1111-0000-4000-8000-000000000001")] == [
-        ("assistant", "It uses make."), ("user", "A different question")]
+        ("user", "Explain the build"), ("user", "A different question")]
+    with open(p, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"$rewindTo": "no-such-id"}) + "\n")                       # an unknown id empties the chat
+    gemini._cache.clear()
+    assert gemini.turns("aaaa1111-0000-4000-8000-000000000001") == [] and gemini.chats(0, 5) == []
+
+
+def test_gemini_patch_updates_remove_order_legacy_checkpoint_and_ignored_user_text(ghome):
+    home, proj, p = ghome
+    cid = "aaaa1111-0000-4000-8000-000000000001"
+    rows = [
+        {"$patch": {"updates": [{"id": "m2", "content": "It uses make, via a Makefile."}], "orderIds": ["m2"]}},     # m2 moves last
+        {"id": "m7", "type": "user", "content": "/memory show", "timestamp": "2026-10-06T10:09:00.000Z"},            # a slash command
+        {"id": "m8", "type": "user", "content": "<session_context>x</session_context>"},
+        {"id": "m9", "type": "user", "content": "?", "timestamp": "2026-10-06T10:09:30.000Z"},
+    ]
+    with open(p, "a", encoding="utf-8") as fh:
+        fh.write("\n".join(json.dumps(r) for r in rows) + "\n")
+    gemini._cache.clear()
+    assert [m["text"] for m in gemini.turns(cid)] == ["Explain the build", "Add a Dockerfile", "Here is a Dockerfile", "It uses make, via a Makefile."]
+    with open(p, "a", encoding="utf-8") as fh:                                          # a legacy full-history checkpoint replaces all
+        fh.write(json.dumps({"$set": {"messages": [{"id": "z1", "type": "user", "content": "from a checkpoint"},
+                                                    {"id": "z2", "type": "gemini", "content": "ok"}]}}) + "\n")
+        fh.write(json.dumps({"id": "z2", "type": "gemini", "content": "ok, replaced in place"}) + "\n")       # same id: replaced, same place
+    gemini._cache.clear()
+    assert [(m["role"], m["text"]) for m in gemini.turns(cid)] == [("user", "from a checkpoint"), ("assistant", "ok, replaced in place")]
+
+
+def test_gemini_chat_with_only_commands_is_not_listed(tmp_path, monkeypatch):
+    monkeypatch.setenv("GEMINI_CLI_HOME", str(tmp_path / "h"))
+    p = tmp_path / "h" / ".gemini" / "tmp" / "proj" / "chats" / "session-2026-10-06T10-00-cccc3333.jsonl"
+    jl(str(p), [{"sessionId": "cccc3333", "projectHash": "h", "startTime": "2026-10-06T10:00:00Z"},
+                {"id": "a", "type": "user", "content": "/help", "timestamp": "2026-10-06T10:00:01Z"}])
+    gemini._cache.clear()
+    assert gemini.info()["available"] is True and gemini.chats(0, 5) == []
 
 
 def test_gemini_survives_a_half_written_line_and_a_legacy_json_file(ghome):
@@ -186,10 +221,69 @@ def test_antigravity_without_transcripts_says_why(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     i = antigravity.info()
-    assert i["available"] is False and "database" in i["detail"]
+    assert i["available"] is False and "no Antigravity conversations" in i["detail"]
 
 
 def test_both_are_built_in_ids_and_cannot_be_redefined_in_agents_json(tmp_path):
     assert {"gemini", "antigravity", "codex", "cursor"} <= set(providers._modules())
     from dhi_orbit.providers import custom
     assert {"gemini", "antigravity"} <= custom.RESERVED
+
+
+# the exact table agy 1.3.1 creates (read from a real install)
+AGY_SUMMARIES_SQL = ("CREATE TABLE `conversation_summaries` (`conversation_id` text,`title` text NOT NULL DEFAULT \"\",`preview` text NOT NULL DEFAULT \"\","
+                     "`step_count` integer NOT NULL DEFAULT 0,`last_modified_time` datetime NOT NULL,`workspace_uris` text NOT NULL,"
+                     "`status` text NOT NULL DEFAULT \"\",`source` text NOT NULL DEFAULT \"\",`project_id` text NOT NULL DEFAULT \"\","
+                     "`agent_name` text NOT NULL DEFAULT \"\",`parent_conversation_id` text NOT NULL DEFAULT \"\",`nesting_depth` integer NOT NULL DEFAULT 0,"
+                     "`battle_id` text NOT NULL DEFAULT \"\",`winning_conversation_id` text NOT NULL DEFAULT \"\",`not_fully_idle` numeric NOT NULL DEFAULT false,"
+                     "`killed` numeric NOT NULL DEFAULT false,`last_user_input_time` datetime NOT NULL,`last_user_input_step_index` integer NOT NULL DEFAULT -1,"
+                     "`app_data_dir` text NOT NULL DEFAULT \"\",`raw_summary` blob,`group_id` text NOT NULL DEFAULT \"\",PRIMARY KEY (`conversation_id`))")
+
+
+def summaries_db(root, rows):
+    os.makedirs(root, exist_ok=True)
+    con = sqlite3.connect(os.path.join(root, "conversation_summaries.db"))
+    con.execute(AGY_SUMMARIES_SQL)
+    for r in rows:
+        con.execute("INSERT INTO conversation_summaries(conversation_id,title,preview,step_count,last_modified_time,workspace_uris,status,"
+                    "parent_conversation_id,nesting_depth,not_fully_idle,killed,last_user_input_time) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", r)
+    con.commit()
+    con.close()
+
+
+def test_antigravity_lists_from_the_real_summaries_database(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    antigravity._cache.clear()
+    root = tmp_path / ".gemini" / "antigravity-cli"
+    old = "2026-10-06 11:00:00+00:00"
+    summaries_db(str(root), [
+        ("c-idle", "Refactor auth", "make it simpler", 12, old, "[\"file:///Users/me/proj%20one\"]", "", "", 0, 0, 0, old),
+        ("c-busy", "Running now", "go", 3, old, "file:///work/b", "", "", 0, 1, 0, old),
+        ("c-dead", "Killed one", "x", 3, old, "", "", "", 0, 0, 1, old),
+        ("c-child", "A sub-agent", "x", 3, old, "", "", "c-idle", 1, 0, 0, old),
+    ])
+    cs = {c["id"]: c for c in antigravity.chats(0, 20)}
+    assert set(cs) == {"c-idle", "c-busy", "c-dead"}                      # the nested sub-agent run is not a chat
+    assert cs["c-idle"]["name"] == "Refactor auth" and cs["c-idle"]["cwd"] == "/Users/me/proj one" and cs["c-idle"]["state"] == "idle"
+    assert cs["c-busy"]["state"] == "working" and cs["c-dead"]["state"] == "stopped"
+    assert cs["c-idle"]["last_prompt"] == "make it simpler" and antigravity.turns("c-idle") == []     # no transcript: nothing to show
+    assert antigravity.info()["available"] is True
+
+
+def test_antigravity_summary_title_and_state_win_and_the_transcript_adds_the_text(agy_home, tmp_path):
+    root, cid = agy_home
+    summaries_db(str(root), [(cid, "Summary title", "p", 5, "2026-10-06 11:03:00+00:00", "file:///w", "", "", 0, 0, 0, "2026-10-06 11:02:00+00:00")])
+    antigravity._cache.clear()
+    c = antigravity.chats(0, 5)[0]
+    assert c["name"] == "Summary title" and c["cwd"] == "/w" and c["final"] == "All green."
+    assert antigravity.turns(cid)[-1]["text"] == "All green."
+
+
+def test_a_corrupt_or_unfamiliar_summaries_database_is_ignored(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    root = tmp_path / ".gemini" / "antigravity-cli"
+    os.makedirs(root)
+    (root / "conversation_summaries.db").write_bytes(b"not a database")
+    assert antigravity.chats(0, 5) == [] and antigravity.info()["available"] is False

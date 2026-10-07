@@ -168,8 +168,8 @@ view), labelled with its name. Four are built in and appear by themselves when t
 |---|---|---|---|
 | Codex | `~/.codex` | `codex exec resume` | Codex 0.160 and real chats; its 5 h and 7 d limits are shown as a gauge |
 | Cursor | `~/.cursor/chats` | `cursor-agent --resume` | Cursor 2026.09 (reading verified; a reply was refused by Cursor's own usage limit) |
-| Gemini CLI | `~/.gemini/tmp/*/chats/session-*.jsonl` (or `$GEMINI_CLI_HOME`) | `gemini --resume <id> -p` in the chat's project folder | Gemini CLI's published source and test files only: no live install yet, so treat it as beta. It keeps no quota on disk, so limits read as unknown |
-| Antigravity | `~/.gemini/antigravity*/brain/*/.system_generated/logs/transcript*.jsonl` | `agy -p <text> --conversation <id>` | public changelog and third-party descriptions only: beta. The conversation database is not read (sources disagree on whether it is encrypted); a chat that exists only there is not listed |
+| Gemini CLI | `~/.gemini/tmp/*/chats/session-*.jsonl` (or `$GEMINI_CLI_HOME`) | `gemini --resume <id> -p` in the chat's project folder | Gemini CLI 0.63.0: its own source (file names, record schema and the replay of rewinds, patches and reorders) and a real 0.63.0 install (project registry and folders). It keeps no quota on disk, so limits read as unknown |
+| Antigravity | `~/.gemini/antigravity*/conversation_summaries.db` (list, titles, folders, running or killed) and the `brain/*/.system_generated/logs/transcript*.jsonl` text | `agy -p <text> --conversation <id>` | agy 1.3.1: a real install (flags, folders, the database schema). The conversation files themselves (`conversations/*`) are not read; the transcript line format is taken from published captures |
 
 A reply you type reaches the same thread and runs detached, so a long turn does not hold the page; it is refused while the agent's turn
 is still running. Limit resume, idle compaction, keep-warm and handoff only ever drive Claude Code and never act on these chats.

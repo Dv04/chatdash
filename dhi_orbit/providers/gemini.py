@@ -82,14 +82,12 @@ def _replay(path: str) -> tuple[dict, list[dict]]:
     except OSError:
         return {}, []
     meta: dict = {}
-    order: list[str] = []
-    msgs: dict[str, dict] = {}
+    msgs: dict[str, dict] = {}                    # insertion-ordered, like the Map Gemini CLI itself replays into
 
-    def add(m: dict):
-        mid = str(m.get("id") or f"_{len(order)}")
-        if mid not in msgs:
-            order.append(mid)
-        msgs[mid] = {**msgs.get(mid, {}), **m}
+    def patch_one(p):
+        m = msgs.get(p.get("id")) if isinstance(p, dict) else None
+        if m is not None and "content" in p and p["content"] is not None:
+            m["content"] = p["content"]
 
     lines: list = []
     if path.endswith(".json"):
@@ -108,38 +106,50 @@ def _replay(path: str) -> tuple[dict, list[dict]]:
                     lines.append(json.loads(ln))
                 except ValueError:
                     continue                                   # a half-written last line
+    # The replay below is Gemini CLI's own (chatRecordingService.ts, createJsonlRecordAccumulator).
     for d in lines:
         if not isinstance(d, dict):
             continue
-        if "$set" in d and isinstance(d["$set"], dict):
-            meta.update(d["$set"])
-        elif "$rewindTo" in d:
-            tgt = d["$rewindTo"]
-            if tgt in msgs:
-                keep = order[: order.index(tgt) + 1]
-                order[:] = keep
-                msgs = {k: msgs[k] for k in keep}
-        elif "$patch" in d and isinstance(d["$patch"], dict):
+        if "$rewindTo" in d:                                   # drops that message and every one after it; an unknown id drops all
+            keys = list(msgs)
+            if d["$rewindTo"] in msgs:
+                for k in keys[keys.index(d["$rewindTo"]):]:
+                    del msgs[k]
+            else:
+                msgs.clear()
+        elif isinstance(d.get("$patch"), dict):
             p = d["$patch"]
+            if isinstance(p.get("id"), str):
+                patch_one(p)
+            for u in p.get("updates") or []:
+                patch_one(u)
             for rid in p.get("removeIds") or []:
-                if rid in msgs:
-                    del msgs[rid]
-                    order.remove(rid)
-            mid = p.get("id")
-            if mid in msgs:
-                msgs[mid].update({k: v for k, v in p.items() if k in ("content", "toolCalls", "displayContent")})
-            if isinstance(p.get("orderIds"), list):
-                ordered = [i for i in p["orderIds"] if i in msgs]
-                order[:] = ordered + [i for i in order if i not in ordered]
+                msgs.pop(rid, None)
+            if isinstance(p.get("orderIds"), list):            # the listed messages move to the end, in that order
+                ordered = {i: msgs[i] for i in p["orderIds"] if isinstance(i, str) and i in msgs}
+                rest = {k: v for k, v in msgs.items() if k not in ordered}
+                msgs.clear()
+                msgs.update(rest)
+                msgs.update(ordered)
+        elif isinstance(d.get("$set"), dict):
+            st = dict(d["$set"])
+            legacy = st.pop("messages", None)                  # a legacy full-history checkpoint replaces everything
+            meta.update(st)
+            if isinstance(legacy, list):
+                msgs.clear()
+                for m in legacy:
+                    if isinstance(m, dict) and m.get("id") and m.get("type"):
+                        msgs[str(m["id"])] = dict(m)
         elif d.get("sessionId") and "type" not in d:
             meta.update(d)                                     # the metadata line
-        elif d.get("type"):
-            add(d)
+        elif d.get("id") and d.get("type"):
+            msgs[str(d["id"])] = dict(d)                       # a record with a known id replaces it, keeping its place
     out = []
-    for mid in order:
-        m = msgs[mid]
+    for m in msgs.values():
         kind = {"user": "user", "gemini": "assistant"}.get(m.get("type"))
-        text = _text(m.get("displayContent") if m.get("type") == "user" and m.get("displayContent") else m.get("content")).strip()
+        text = _text(m.get("content")).strip()
+        if kind == "user" and (not text or text.startswith(("/", "?", "<session_context>", "<hook_context>"))):
+            continue                                           # slash commands and injected context: not conversation (Gemini hides them too)
         if kind and text:
             out.append({"role": kind, "text": text[:6000], "at": _epoch(m.get("timestamp")), "model": m.get("model")})
     return meta, out
@@ -157,7 +167,7 @@ def _chat(path: str) -> dict | None:
     if hit and hit[0] == (st.st_mtime, st.st_size):
         return hit[1]
     meta, msgs = _replay(path)
-    if meta.get("kind") == "subagent":
+    if meta.get("kind") == "subagent" or not msgs:             # sub-agent runs and empty or command-only chats are not chats
         return None
     cid = str(meta.get("sessionId") or os.path.splitext(os.path.basename(path))[0])
     users = [m for m in msgs if m["role"] == "user"]

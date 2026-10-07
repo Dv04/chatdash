@@ -1,21 +1,24 @@
 """Google Antigravity (the `agy` command line agent and the Antigravity desktop and IDE apps).
 
-Read from the plain-text transcript each conversation keeps: `<root>/brain/<conversation id>/.system_generated/logs/transcript_full.jsonl`
+Listing comes from `<root>/conversation_summaries.db`, a plain SQLite file (schema read from a real agy 1.3.1 install): per conversation
+its id, title, preview, last_modified_time, workspace_uris, status, not_fully_idle (a turn is running), killed, and parent_conversation_id
+(sub-agent runs). The messages come from the plain-text transcript each conversation keeps: `<root>/brain/<conversation id>/.system_generated/logs/transcript_full.jsonl`
 (or `transcript.jsonl`, which can be truncated) under `~/.gemini/antigravity-cli`, `~/.gemini/antigravity` and `~/.gemini/antigravity-ide`.
 A line is {"step_index", "source": "USER_EXPLICIT" | "MODEL" | ..., "type": "USER_INPUT" | "PLANNER_RESPONSE" | ..., "created_at",
 "content"}; the user's text arrives wrapped in <USER_REQUEST>...</USER_REQUEST>. Titles and folders come from `<root>/history.jsonl` when
-it has them. The conversation database itself (conversations/*.db) is NOT read: sources disagree on whether it is encrypted.
+it has them. The conversations themselves (conversations/*.db and *.pb) are NOT read: sources disagree on whether they are encrypted.
 Reply: `agy -p <text> --conversation <id>` (print mode; the flag spelling comes from a third-party reference and the CHANGELOG of the
 agy repository, so a failure is shown with agy's own message). The desktop and IDE apps have no documented way to be sent a prompt:
 a chat that only lives there is shown but a reply may be refused by agy.
-Built from third-party descriptions and the public changelog, with no Antigravity install to check against: treat as beta. Anything
-this does not cover can be described in agents.json instead."""
+Checked against a real agy 1.3.1 install for its flags, folders and the summaries schema; the transcript line format comes from third-party
+captures (no signed-in conversation was available to read). Anything this does not cover can be described in agents.json instead."""
 from __future__ import annotations
 
 import glob
 import json
 import os
 import re
+import sqlite3
 import time
 
 from . import cached_version, clip, run_detached, which
@@ -52,9 +55,49 @@ def _transcripts() -> list[tuple[str, str, str]]:
 
 def info() -> dict:
     e = exe()
-    have = bool(_transcripts())
+    have = bool(_transcripts()) or any(_summaries(r) for r in roots())
     return {"available": have, "version": cached_version(e) if e else None, "can_reply": bool(e),
-            "detail": None if have else "no Antigravity transcripts under ~/.gemini (this build may keep chats only in its database)"}
+            "detail": None if have else "no Antigravity conversations under ~/.gemini"}
+
+
+FILE_URI_RE = re.compile(r"file://(/[^\s\",\]\[]*)")
+
+
+def _summaries(root: str) -> list[dict]:
+    """Rows of conversation_summaries.db that are real chats (not sub-agent runs), read-only; [] when absent or unreadable."""
+    p = os.path.join(root, "conversation_summaries.db")
+    if not os.path.isfile(p):
+        return []
+    try:
+        con = sqlite3.connect("file:" + p.replace("\\", "/").replace("?", "%3f").replace("#", "%23") + "?mode=ro", uri=True, timeout=2)
+    except sqlite3.Error:
+        return []
+    out = []
+    try:
+        cols = {r[1] for r in con.execute("PRAGMA table_info(conversation_summaries)")}
+        want = [c for c in ("conversation_id", "title", "preview", "step_count", "last_modified_time", "workspace_uris", "status",
+                            "not_fully_idle", "killed", "parent_conversation_id", "nesting_depth", "last_user_input_time") if c in cols]
+        if "conversation_id" not in want:
+            return []
+        for row in con.execute(f"SELECT {','.join(want)} FROM conversation_summaries"):
+            d = dict(zip(want, row))
+            if d.get("parent_conversation_id") or (d.get("nesting_depth") or 0) > 0:
+                continue
+            out.append(d)
+    except sqlite3.Error:
+        return []
+    finally:
+        con.close()
+    return out
+
+
+def _cwd_of(uris) -> str | None:
+    m = FILE_URI_RE.search(str(uris or ""))
+    if not m:
+        return None
+    from urllib.parse import unquote
+    path = unquote(m.group(1))
+    return path[1:] if re.match(r"^/[A-Za-z]:", path) else path        # file:///C:/x on Windows
 
 
 def _history(root: str) -> dict[str, dict]:
@@ -133,22 +176,33 @@ def _chat(cid: str, path: str, root: str, hist: dict) -> dict | None:
 
 
 def chats(since: float, limit: int = 120) -> list[dict]:
+    items: dict[str, dict] = {}
+    for r in roots():
+        for d in _summaries(r):
+            cid = str(d["conversation_id"])
+            upd = _epoch(d.get("last_modified_time")) or 0.0
+            idle = not d.get("not_fully_idle")
+            status = str(d.get("status") or "")
+            state = ("stopped" if d.get("killed") else "working" if not idle else
+                     "failed" if re.search(r"error|fail", status, re.I) else "idle")
+            items[cid] = {"key": f"antigravity:{cid}", "provider": "antigravity", "id": cid,
+                          "name": clip(str(d.get("title") or d.get("preview") or f"Antigravity chat {cid[:6]}").replace("\n", " "), 90),
+                          "cwd": _cwd_of(d.get("workspace_uris")), "state": state, "error": None, "updated_at": upd,
+                          "created_at": upd, "model": None, "last_prompt": clip(str(d.get("preview") or ""), 500), "final": "",
+                          "final_at": None, "path": None, "root": r}
     hists: dict[str, dict] = {}
-    items = []
     for cid, p, r in _transcripts():
-        try:
-            mt = os.path.getmtime(p)
-        except OSError:
-            continue
-        if mt >= since:
-            items.append((mt, cid, p, r))
-    items.sort(reverse=True)
-    out = []
-    for _, cid, p, r in items[: limit * 2]:
         hists.setdefault(r, _history(r))
         c = _chat(cid, p, r, hists[r])
-        if c and c["updated_at"] >= since:
-            out.append(c)
+        if not c:
+            continue
+        if cid in items:                                        # the summary wins for title, folder and state; the transcript adds the text
+            base = items[cid]
+            items[cid] = {**c, "name": base["name"] or c["name"], "cwd": base["cwd"] or c["cwd"], "state": base["state"],
+                          "updated_at": max(base["updated_at"], c["updated_at"])}
+        else:
+            items[cid] = c
+    out = [c for c in items.values() if c["updated_at"] >= since]
     out.sort(key=lambda c: c["updated_at"], reverse=True)
     return out[:limit]
 
@@ -162,8 +216,8 @@ def find(cid: str) -> dict | None:
 
 def turns(cid: str, limit: int = 80) -> list[dict]:
     c = find(cid)
-    if not c:
-        return []
+    if not c or not c.get("path"):
+        return []                                   # listed from the summaries database only: there is no transcript to read
     return [{"role": m["role"], "text": m["text"], "at": m["at"] or c["updated_at"]} for m in _messages(c["path"])[-limit:]]
 
 

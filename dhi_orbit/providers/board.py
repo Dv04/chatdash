@@ -15,7 +15,13 @@ def iso(t: float | None) -> str | None:
 
 
 def is_path(path: str | None) -> bool:
-    return bool(path) and path.split(":", 1)[0] in ("codex", "cursor") and ":" in path and "/" not in path.split(":", 1)[0]
+    if not path or ":" not in path:
+        return False
+    head = path.split(":", 1)[0]
+    if "/" in head or "\\" in head or len(head) < 2:             # a file path ("C:\...", "/x:y"), never a provider chat
+        return False
+    from . import ids
+    return head in ids()
 
 
 def split_path(path: str) -> tuple[str, str]:

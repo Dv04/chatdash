@@ -427,8 +427,8 @@ def open_terminal(chat: dict) -> dict:
     cwd = chat.get("cwd") or config.default_cwd()
     if chat.get("provider"):
         named = False
-        tail = {"codex": f"codex resume {chat['session_id']}", "cursor": f"cursor-agent --resume {chat['session_id']}"}.get(
-            chat["provider"], "")
+        from . import providers
+        tail = providers.terminal_command(chat["provider"], chat["session_id"]) or ""
         if not tail:
             return {"ok": False, "error": "no terminal command for this chat"}
     else:

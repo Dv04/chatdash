@@ -300,6 +300,9 @@ class Sources:
         try:
             from .. import providers
             seats += providers.seats(chats)       # Codex and Cursor appear as seats with unknown limits (no usage meter)
+            bad = providers.problems()
+            if bad:
+                errors["agents.json"] = "; ".join(bad)[:300]
         except Exception as e:
             errors["providers"] = f"{type(e).__name__}: {e}"
         snap = {"at": now, "chats": chats, "jobs": jobs, "seats": seats, "fleet": fleet, "errors": errors}

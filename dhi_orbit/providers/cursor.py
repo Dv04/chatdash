@@ -198,3 +198,7 @@ def reply(cid: str, text: str) -> dict:
         return {"ok": False, "error": "no such Cursor chat"}
     r = run_detached([e, "-p", "--trust", "--resume", cid, text], c.get("cwd") or "", None, f"cursor-{cid[:8]}", settle_s=15.0)
     return {**r, "route": "cursor-agent --resume"}
+
+
+def terminal_command(cid: str) -> str | None:
+    return f"cursor-agent --resume {cid}"

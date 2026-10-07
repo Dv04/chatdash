@@ -159,13 +159,51 @@ the Claude Code configuration of each account you want covered:
 
 Both fail open: any error, a read-only account, or a non-background session prints nothing and the chat carries on.
 
-## Codex and Cursor chats
+## Other agents on the same board
 
-If the Codex CLI (`~/.codex`) or the Cursor CLI (`~/.cursor/chats`) is installed, its chats appear in the same lists as your Claude
-Code chats (Board, Sessions, Graph, search, the chat view), labelled Codex or Cursor. Reading is verified against Codex 0.160 and
-Cursor 2026.09. A reply you type reaches the same thread (`codex exec resume`, `cursor-agent --resume`) and runs detached, so a long
-turn does not hold the page; it is refused while a Codex turn is still running. Limit resume, idle compaction, keep-warm and handoff
-only ever drive Claude Code and never act on these chats. Turn a tool off with `"providers_off": ["cursor"]` in `config.json`.
+Every local terminal agent you use can sit in the same lists as your Claude Code chats (Board, Sessions, Graph, search, the chat
+view), labelled with its name. Four are built in and appear by themselves when their files exist:
+
+| Agent | Read from | Reply runs | Checked against |
+|---|---|---|---|
+| Codex | `~/.codex` | `codex exec resume` | Codex 0.160 and real chats; its 5 h and 7 d limits are shown as a gauge |
+| Cursor | `~/.cursor/chats` | `cursor-agent --resume` | Cursor 2026.09 (reading verified; a reply was refused by Cursor's own usage limit) |
+| Gemini CLI | `~/.gemini/tmp/*/chats/session-*.jsonl` (or `$GEMINI_CLI_HOME`) | `gemini --resume <id> -p` in the chat's project folder | Gemini CLI's published source and test files only: no live install yet, so treat it as beta. It keeps no quota on disk, so limits read as unknown |
+| Antigravity | `~/.gemini/antigravity*/brain/*/.system_generated/logs/transcript*.jsonl` | `agy -p <text> --conversation <id>` | public changelog and third-party descriptions only: beta. The conversation database is not read (sources disagree on whether it is encrypted); a chat that exists only there is not listed |
+
+A reply you type reaches the same thread and runs detached, so a long turn does not hold the page; it is refused while the agent's turn
+is still running. Limit resume, idle compaction, keep-warm and handoff only ever drive Claude Code and never act on these chats.
+Turn a built-in off with `"providers_off": ["cursor"]` in `config.json`.
+
+### Any other terminal agent: `agents.json`
+
+Put a file `agents.json` in the data folder (next to `config.json`) describing the agent. No code, no restart of your agent.
+
+```json
+{"agents": [
+  {"id": "myagent", "label": "My agent",
+   "files": {"glob": "~/.myagent/sessions/*.jsonl", "format": "jsonl", "role": "role", "text": "content", "time": "ts", "cwd": "cwd"},
+   "reply": ["myagent", "--resume", "{id}", "-p", "{text}"],
+   "terminal": ["myagent", "--resume", "{id}"]},
+
+  {"id": "bridge", "label": "Bridge",
+   "list": ["python3", "~/bin/bridge.py", "list"],
+   "turns": ["python3", "~/bin/bridge.py", "turns", "{id}"],
+   "reply": ["python3", "~/bin/bridge.py", "send", "{id}", "{text}"]}
+]}
+```
+
+- **By files** (the agent keeps one file per chat): `glob` (a string or a list), `format` (`jsonl` = one message per line, or `json` = a
+  list, or an object holding one under `messages`), and the field names for `role`, `text` and optionally `time` and `cwd` (dotted
+  paths such as `message.content` work). Roles `user` / `human` and `assistant` / `model` / `ai` are understood; add `user_roles`
+  or `assistant_roles` for others. A text field may be a string or a list of parts with `text`.
+- **By script**: `list` prints a JSON list of `{id, title, cwd, updated_at, state, last_prompt, final, model}`; `turns` prints
+  `[{role, text, at}]` for one chat (`{id}` and `{limit}` are filled in). Any language: the script does the reading, so SQLite or
+  anything else an agent uses fits.
+- `reply` is a command, not shell text: each item is passed as is, `{id}`, `{text}` and `{cwd}` are replaced inside an item, and the
+  text is always one argument, so quotes, `&&` and `$(...)` in a message do nothing. Without `reply` the agent is read-only.
+- A mistake in the file never stops the board: it shows as a health note ("agents.json: ...") and the other entries still load.
+  The ids `claude`, `codex`, `cursor`, `gemini`, `antigravity` and `main` are taken.
 
 ## How a reply is delivered
 

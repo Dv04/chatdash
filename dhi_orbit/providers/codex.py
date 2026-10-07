@@ -236,3 +236,7 @@ def _iso_epoch(ts) -> float | None:
         return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
     except ValueError:
         return None
+
+
+def terminal_command(cid: str) -> str | None:
+    return f"codex resume {cid}"

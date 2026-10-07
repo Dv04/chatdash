@@ -17,7 +17,10 @@ import sys
 import threading
 import time
 
-from .. import _plat, config
+try:
+    from .. import _plat, config                     # DHI Orbit
+except ImportError:                                  # a host that is not the dhi_orbit package (the private chatdash) supplies its own
+    from ._host import _plat, config
 
 _CACHE: dict = {}
 _LOCK = threading.Lock()
@@ -25,8 +28,35 @@ TTL_S = 4.0
 
 
 def _modules() -> dict:
-    from . import codex, cursor
-    return {"codex": codex, "cursor": cursor}
+    """Every provider by id: the built-in readers, then the agents described in agents.json (a built-in id is never replaced)."""
+    from . import antigravity, codex, cursor, custom, gemini
+    mods = {"codex": codex, "cursor": cursor, "gemini": gemini, "antigravity": antigravity}
+    try:
+        for a in custom.load()[0]:
+            mods.setdefault(a.id, a)
+    except Exception:                       # a broken agents.json never takes the built-in providers down
+        pass
+    return mods
+
+
+def ids() -> set[str]:
+    return set(_modules())
+
+
+def problems() -> list[str]:
+    """What is wrong in agents.json (empty when it is fine or absent)."""
+    from . import custom
+    try:
+        return list(custom.load()[1])
+    except Exception as e:
+        return [f"agents.json: {type(e).__name__}: {e}"]
+
+
+def terminal_command(provider: str, cid: str) -> str | None:
+    """The command that resumes a chat in a terminal, or None when the provider has none."""
+    mod = _modules().get(provider)
+    fn = getattr(mod, "terminal_command", None)
+    return fn(cid) if fn else None
 
 
 def providers() -> dict:
@@ -119,8 +149,11 @@ def seats(rows_: list[dict]) -> list[dict]:
             lim = None
         s = _rows.seat(pid, label, [], lim)
         if s["resume_at"]:
-            from ..cp import limits as _limits
-            s["resume_at_ct"] = _limits.fmt_clock(s["resume_at"])
+            try:
+                from ..cp import limits as _limits
+            except ImportError:
+                from cp import limits as _limits
+            s["resume_at_ct"] = (getattr(_limits, "fmt_clock", None) or _limits.fmt_ct)(s["resume_at"])
         out.append(s)
     return out
 

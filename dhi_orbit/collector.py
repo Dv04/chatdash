@@ -60,6 +60,46 @@ def _alive(pids: list[int]) -> set[int]:
     return set(pids) & _PS[1]
 
 
+_AGENTS: dict = {}          # cfg -> (taken at, records): `claude agents --json` costs a process start (about 0.2 s)
+
+
+def agents_json(cfg: str) -> list[dict]:
+    """Running sessions of an account from `claude agents --json`, the documented, stable interface (interactive and
+    background, pid and status while alive), shaped like the sessions/<pid>.json records. Cached 8 s per account."""
+    hit = _AGENTS.get(cfg)
+    if hit and time.time() - hit[0] < 8:
+        return hit[1]
+    recs: list[dict] = []
+    try:
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDE_CONFIG_DIR"}
+        if os.path.basename(cfg) != ".claude" or os.path.normpath(os.path.dirname(cfg)) != os.path.normpath(HOME):
+            env["CLAUDE_CONFIG_DIR"] = cfg
+        p = subprocess.run([config.claude_bin(), "agents", "--json"], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=15, env=env, stdin=subprocess.DEVNULL)
+        rows = json.loads(p.stdout) if p.returncode == 0 and p.stdout.strip().startswith("[") else []
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        rows = []
+    for r in rows if isinstance(rows, list) else []:
+        if not isinstance(r, dict) or not r.get("pid") or not r.get("sessionId"):
+            continue                                   # a background row with no process is a job record, read from jobs/
+        recs.append({"pid": int(r["pid"]), "sessionId": r["sessionId"], "cwd": r.get("cwd"), "name": r.get("name"),
+                     "kind": "bg" if r.get("kind") == "background" else "interactive", "jobId": r.get("id"),
+                     "status": r.get("status") or "idle", "startedAt": r.get("startedAt")})
+    _AGENTS[cfg] = (time.time(), recs)
+    return recs
+
+
+def _recently_written(cfg: str, within_s: float = 1800) -> bool:
+    now = time.time()
+    try:
+        for p in glob.glob(os.path.join(cfg, "projects", "*", "*.jsonl")):
+            if now - os.path.getmtime(p) < within_s:
+                return True
+    except OSError:
+        pass
+    return False
+
+
 def live_sessions(cfg: str) -> list[dict]:
     sdir = os.path.join(cfg, "sessions")
     try:
@@ -76,6 +116,10 @@ def live_sessions(cfg: str) -> list[dict]:
         except (OSError, ValueError):
             continue
         recs.append(d)
+    if not recs and _recently_written(cfg):
+        # No sessions/<pid>.json at all although a transcript was written in the last 30 min: this Claude Code does not
+        # keep that (undocumented) registry. Ask it, through the documented command, instead of showing live chats as closed.
+        return agents_json(cfg)
     alive = _alive([r["pid"] for r in recs])
     return [r for r in recs if r["pid"] in alive]
 

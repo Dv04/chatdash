@@ -23,6 +23,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 
@@ -77,17 +78,31 @@ def command() -> str:
     """The status line command: this interpreter running dhi_orbit.statusline, with the data dir pinned so the
     meter lands where this DHI Orbit reads it."""
     if _plat.IS_WIN:
-        # cmd, PowerShell and Git Bash disagree about VAR=value prefixes, so the data dir is an argument. Forward slashes
-        # keep shlex (is_ours / missing_interpreter) and every shell reading the same path.
+        # Claude Code runs a status line command through Git Bash when it is installed, else through PowerShell (docs:
+        # Customize your status line > Windows configuration). They disagree about VAR=value prefixes, so the data dir is an
+        # argument; forward slashes survive Git Bash (it eats backslashes). A PowerShell command that starts with a quoted
+        # string is just a string, so there the interpreter is called with &; Git Bash would reject a leading &.
         q = lambda p: '"' + p.replace("\\", "/") + '"'
-        return f"{q(sys.executable)} -m {MARK} --home {q(config.home())}"
+        exe = shutil.which("dhi-orbit-statusline")
+        if exe:                                                         # the console script is a bare name in every shell
+            return f"dhi-orbit-statusline --home {q(config.home())}"
+        lead = "" if _has_git_bash() else "& "
+        return f"{lead}{q(sys.executable)} -m {MARK} --home {q(config.home())}"
     return (f"DHI_ORBIT_HOME={shlex.quote(config.home())} "
             f"{shlex.quote(sys.executable)} -m {MARK}")
 
 
+def _has_git_bash() -> bool:
+    for p in (os.environ.get("CLAUDE_CODE_GIT_BASH_PATH"), r"C:\Program Files\Git\bin\bash.exe",
+              r"C:\Program Files (x86)\Git\bin\bash.exe"):
+        if p and os.path.isfile(p):
+            return True
+    return False
+
+
 def is_ours(sl) -> bool:
     cmd = str(sl.get("command") or "") if isinstance(sl, dict) else ""
-    return MARK in cmd or LEGACY_MARK in cmd
+    return MARK in cmd or LEGACY_MARK in cmd or "dhi-orbit-statusline" in cmd
 
 
 def missing_interpreter(cmd: str) -> str | None:

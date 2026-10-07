@@ -305,7 +305,21 @@ def answer_dialog(chat: dict, n: int, label: str = "", text: str = "") -> dict:
         _close_attach(pty)
 
 
+SHIM_UNSAFE = set('\r\n"%&|<>^')
+
+
+def shim_problem(text: str) -> str | None:
+    """A .cmd/.bat launcher (the npm shim) runs through cmd.exe, which cannot carry these characters in an argument."""
+    if _plat.IS_WIN and CLAUDE.lower().endswith((".cmd", ".bat")) and any(c in SHIM_UNSAFE for c in text):
+        return ("This computer starts Claude Code through a .cmd shim (npm install), and Windows cannot pass new lines, quotes or "
+                "& | < > ^ % through it. Run `claude install` once to switch to the native claude.exe, then try again.")
+    return None
+
+
 def resume_bg(cfg: str, session_id: str, text: str, cwd: str | None) -> dict:
+    bad = shim_problem(text)
+    if bad:
+        return {"ok": False, "route": "resume-bg", "error": bad}
     p = subprocess.run([CLAUDE, "--resume", session_id, "--bg", text], cwd=cwd or config.default_cwd(),
                        env=_env(cfg), capture_output=True, text=True, timeout=60)
     import re
@@ -322,9 +336,9 @@ def reply(chat: dict, text: str) -> dict:
         return {"ok": False, "error": "empty message"}
     if chat["kind"] == "interactive" and chat["live"]:
         return {"ok": False, "route": "refused",
-                "error": "This chat is open in a terminal tab. Text can be typed into the tab from here, but "
-                         "Claude's input box does not treat the Return as Enter, so it would sit unsent in your "
-                         "prompt. Type there, or close the tab and reply from here."}
+                "error": "This chat is open in a terminal, and DHI Orbit cannot type into another terminal's prompt (a second "
+                         "writer would also corrupt the session). In that terminal type /bg: Claude Code moves the chat to "
+                         "the background, and you can reply from here. Or type your reply in the terminal."}
     if chat["state"] == "working":
         return {"ok": False, "route": "refused",
                 "error": "The chat is working right now. Reply when it is idle (or queue it)."}
@@ -334,6 +348,9 @@ def reply(chat: dict, text: str) -> dict:
 
 
 def new_chat(cfg: str, name: str, text: str, cwd: str) -> dict:
+    bad = shim_problem(text + name)
+    if bad:
+        return {"ok": False, "error": bad}
     p = subprocess.run([CLAUDE, "--bg", "-n", name, text], cwd=cwd, env=_env(cfg),
                        capture_output=True, text=True, timeout=60)
     import re

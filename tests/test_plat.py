@@ -231,14 +231,24 @@ def test_actions_type_into_attach_over_windows_pty(winpty, tmp_path, monkeypatch
 
 
 # ---------------------------------------------------------------- the status line command on Windows
-def test_statusline_command_windows_form(monkeypatch, tmp_path):
+def test_statusline_command_windows_forms(monkeypatch, tmp_path):
+    """Claude Code runs the command through Git Bash when installed, else PowerShell (docs: status line > Windows configuration)."""
     monkeypatch.setattr(_plat, "IS_WIN", True)
     monkeypatch.setattr(sys, "executable", "C:\\Python312\\python.exe")
     monkeypatch.setenv("DHI_ORBIT_HOME", str(tmp_path))
-    cmd = usage_meter.command()
-    assert cmd.startswith('"C:/Python312/python.exe" -m dhi_orbit.statusline --home "')
-    assert "=" not in cmd.split(" ")[0]                             # no VAR=value prefix (cmd and PowerShell cannot run it)
-    assert usage_meter.is_ours({"command": cmd})
+    monkeypatch.setattr(usage_meter.shutil, "which", lambda n: None)
+    monkeypatch.setattr(usage_meter, "_has_git_bash", lambda: True)
+    bash = usage_meter.command()
+    assert bash.startswith('"C:/Python312/python.exe" -m dhi_orbit.statusline --home "') and "=" not in bash.split(" ")[0]
+    monkeypatch.setattr(usage_meter, "_has_git_bash", lambda: False)
+    ps = usage_meter.command()
+    assert ps.startswith('& "C:/Python312/python.exe" -m dhi_orbit.statusline --home "'), "a quoted first token is only a string in PowerShell"
+    monkeypatch.setattr(usage_meter.shutil, "which", lambda n: "C:/Users/x/.local/bin/dhi-orbit-statusline.exe")
+    bare = usage_meter.command()
+    assert bare.startswith('dhi-orbit-statusline --home "')
+    for c in (bash, ps, bare):
+        assert usage_meter.is_ours({"command": c}), c
+        assert usage_meter.missing_interpreter(c) is None or os.path.exists(usage_meter.missing_interpreter(c)) is False
 
 
 def test_statusline_home_argument(tmp_path):

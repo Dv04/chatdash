@@ -40,9 +40,14 @@ python3 -m pip install dhi-orbit
 You also need Claude Code itself (`claude` on your `PATH`).
 
 Windows: `pipx install dhi-orbit` (or pip) pulls in `pywinpty` (ConPTY, used to type into `claude attach` and to run
-sign-in) and `tzdata` by itself. Use Windows 10 version 1809 or newer for ConPTY. The board, replies, answering
-questions, sign-in, keep-warm (the PC is kept awake) and the status-line meter are ported; the Schedules panel
-(launchd and cron) is macOS and Linux only and stays empty on Windows, and desktop notifications are a tray balloon.
+sign-in) and `tzdata` by itself. Use Windows 10 version 1809 or newer for ConPTY. Git for Windows is not needed. The board,
+replies, answering questions, sign-in, keep-warm (the PC is kept awake) and the status-line meter are ported; the Schedules
+panel (launchd and cron) is macOS and Linux only and stays empty on Windows, and desktop notifications are a tray balloon.
+Notes from Claude Code's documentation: install Claude Code natively (`irm https://claude.ai/install.ps1 | iex`); if you
+installed it with npm, run `claude install` once, because a `.cmd` launcher cannot pass new lines or quotes in a reply. A chat
+open in a terminal cannot be typed into from here (on any system): type `/bg` in that terminal and it becomes a background chat
+you can answer here. Only chats touched in the last 24 hours are listed: start with `dhi-orbit --window-hours 168` for a week.
+Where Claude Code does not keep its `sessions/` folder, running chats are read with `claude agents --json`.
 The Windows port has been tested against a simulated ConPTY only: please report anything odd on a real machine.
 
 ## Quick start

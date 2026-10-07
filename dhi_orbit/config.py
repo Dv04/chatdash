@@ -189,7 +189,30 @@ def claude_bin() -> str:
     if env:
         return env
     import shutil
-    return shutil.which("claude") or os.path.expanduser("~/.local/bin/claude" + (".exe" if os.name == "nt" else ""))
+    found = shutil.which("claude")
+    if os.name == "nt":
+        return windows_native_claude(found)
+    return found or os.path.expanduser("~/.local/bin/claude")
+
+
+def windows_native_claude(found: str | None) -> str:
+    """On Windows prefer claude.exe over a .cmd or .ps1 shim. Python starts a .cmd through cmd.exe, which truncates an argument
+    at its first newline and mangles & | ^ % < > and quotes, so a prompt handed to `claude --resume <id> --bg <text>` through
+    the npm shim arrives broken. The npm package installs the same native binary (docs: Advanced setup > Install with npm)."""
+    if found and found.lower().endswith(".exe"):
+        return found
+    cands = [os.path.expanduser("~/.local/bin/claude.exe")]                       # the native installer
+    if found:
+        base = os.path.dirname(found)
+        cands += [os.path.join(base, "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe"),
+                  os.path.join(base, "node_modules", "@anthropic-ai", "claude-code", "claude.exe")]
+    la = os.environ.get("LOCALAPPDATA")
+    if la:
+        cands.append(os.path.join(la, "Microsoft", "WinGet", "Links", "claude.exe"))
+    for c in cands:
+        if os.path.isfile(c):
+            return c
+    return found or cands[0]
 
 
 def public_url() -> str:

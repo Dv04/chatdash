@@ -51,6 +51,8 @@ def short_line(doc: dict) -> str:
 
 
 def main(stdin=None, stdout=None, env=os.environ) -> int:
+    if stdin is None and len(sys.argv) >= 3 and sys.argv[1] == "--home":   # the console script on Windows (usage_meter.command)
+        os.environ["DHI_ORBIT_HOME"] = sys.argv[2]
     stdin = stdin or sys.stdin.buffer
     stdout = stdout or sys.stdout.buffer
     raw = b""

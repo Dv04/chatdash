@@ -59,7 +59,9 @@ def hidden() -> set[str]:
 
 
 def discovered() -> list[str]:
-    """Every account dir on disk (hidden ones included): ~/.claude and ~/.claude-<name> with projects/ and sessions/."""
+    """Every account dir on disk (hidden ones included): ~/.claude and ~/.claude-<name> with a projects/ folder (the transcripts).
+    sessions/ is not required: the docs do not list it (it is an undocumented live-process registry), so a Claude Code that does
+    not write it, as may be the case on Windows, must not hide the whole account."""
     out = []
     r = root()
     try:
@@ -70,7 +72,7 @@ def discovered() -> list[str]:
         if b != ".claude" and not b.startswith(".claude-"):
             continue
         d = os.path.join(r, b)
-        if os.path.isdir(os.path.join(d, "projects")) and os.path.isdir(os.path.join(d, "sessions")):
+        if os.path.isdir(os.path.join(d, "projects")):
             out.append(d)
     return out
 

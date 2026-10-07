@@ -48,7 +48,7 @@ installed it with npm, run `claude install` once, because a `.cmd` launcher cann
 open in a terminal cannot be typed into from here (on any system): type `/bg` in that terminal and it becomes a background chat
 you can answer here. Only chats touched in the last 24 hours are listed: start with `dhi-orbit --window-hours 168` for a week.
 Where Claude Code does not keep its `sessions/` folder, running chats are read with `claude agents --json`.
-**Windows support is beta in 0.3.8**: it is tested against a simulated ConPTY only, not yet on a real Windows PC. Please report anything odd (Settings > Report a bug or send feedback).
+**Windows support is beta in 0.3.11**: it passes its 14 end-to-end checks and the full test suite on a Windows 11 ARM64 virtual machine (real ConPTY, real `claude.exe`, with and without Git for Windows), but has not been run on every kind of PC yet. Please report anything odd (Settings > Report a bug or send feedback).
 
 ## Quick start
 

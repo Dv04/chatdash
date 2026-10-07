@@ -10,18 +10,19 @@ import pytest
 
 from dhi_orbit import accounts, config, statusline, usage_meter
 
-FAKE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "fake_claude.py")
+P = lambda s: s.replace("\\", "/")                      # the commands DHI Orbit writes use forward slashes on every system
+POSIX_ONLY = pytest.mark.skipif(sys.platform == "win32", reason="a POSIX status line (VAR=value prefix, /usr/bin paths): a chatdash-era command, never written on Windows")
 DOC = {"session_id": "s1", "model": {"display_name": "Opus"},
        "rate_limits": {"five_hour": {"used_percentage": 12.4, "resets_at": 1791247800},
                        "seven_day": {"used_percentage": 40, "resets_at": 1791716400}}}
 
 
 @pytest.fixture
-def env(tmp_path, monkeypatch):
+def env(tmp_path, monkeypatch, fake_claude_bin):
     monkeypatch.setenv("DHI_ORBIT_ACCOUNTS_ROOT", str(tmp_path / "home"))
     monkeypatch.setenv("DHI_ORBIT_HOME", str(tmp_path / "data"))
     monkeypatch.setenv("DHI_ORBIT_TRASH", str(tmp_path / "trash"))
-    monkeypatch.setenv("CLAUDE_BIN", FAKE)
+    monkeypatch.setenv("CLAUDE_BIN", fake_claude_bin)
     monkeypatch.delenv("CP_METER_LOG", raising=False)
     os.makedirs(tmp_path / "home")
     config._CACHE.clear()
@@ -47,8 +48,14 @@ def run_statusline(d, doc, env):
     """Run the command DHI Orbit wrote, through a shell, the way Claude Code runs a status line."""
     cmd = settings(d)["statusLine"]["command"]
     e = dict(os.environ, CLAUDE_CONFIG_DIR=d, PYTHONPATH=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    p = subprocess.run(cmd, shell=True, input=json.dumps(doc).encode(), capture_output=True, env=e, timeout=20)
-    return p
+    if sys.platform == "win32":      # Claude Code uses Git Bash when it is installed, else PowerShell; the command is written for that shell
+        if cmd.startswith("& "):
+            argv = ["powershell", "-NoProfile", "-Command", cmd]
+        else:
+            bash = os.environ.get("CLAUDE_CODE_GIT_BASH_PATH") or r"C:\Program Files\Git\bin\bash.exe"
+            argv = [bash, "-c", cmd]
+        return subprocess.run(argv, input=json.dumps(doc).encode(), capture_output=True, env=e, timeout=60)
+    return subprocess.run(cmd, shell=True, input=json.dumps(doc).encode(), capture_output=True, env=e, timeout=20)
 
 
 def test_turn_on_a_fresh_account_writes_settings_and_the_status_line_records_limits(env):
@@ -57,7 +64,7 @@ def test_turn_on_a_fresh_account_writes_settings_and_the_status_line_records_lim
     r = usage_meter.turn_on(d)
     assert r == {"ok": True, "on": True, "wrapped": False}
     sl = settings(d)["statusLine"]
-    assert sl["type"] == "command" and usage_meter.MARK in sl["command"] and str(env / "data") in sl["command"]
+    assert sl["type"] == "command" and usage_meter.MARK in sl["command"] and P(str(env / "data")) in sl["command"]
     p = run_statusline(d, DOC, env)
     assert p.returncode == 0 and p.stdout.decode() == "Opus  5h 12%  7d 40%"
     line = open(env / "data" / "meter.log").read().strip().split("\t")
@@ -68,7 +75,9 @@ def test_turn_on_a_fresh_account_writes_settings_and_the_status_line_records_lim
 
 
 def test_an_existing_status_line_keeps_running_and_is_restored_exactly(env):
-    own = {"type": "command", "command": "printf 'mine:%s' \"$(cat | head -c 13)\"", "padding": 2}
+    own = {"type": "command", "padding": 2,
+           "command": (f'"{sys.executable}" -c "import sys; sys.stdout.write(\'mine:\' + sys.stdin.read(13))"' if sys.platform == "win32"
+                       else "printf 'mine:%s' \"$(cat | head -c 13)\"")}
     d = acct(env, "dev", {"model": "opus", "statusLine": own, "permissions": {"allow": ["Bash(ls)"]}})
     before = settings(d)
     r = usage_meter.turn_on(d)
@@ -143,7 +152,11 @@ def test_seat_rows_say_whether_the_meter_is_on(env):
 
 def test_names_are_dhi_orbit_and_the_command_pins_the_new_home_variable(env):
     assert usage_meter.SAVED == "dhi-orbit-statusline.json" and usage_meter.MARK == "dhi_orbit.statusline"
-    assert usage_meter.command().startswith(f"DHI_ORBIT_HOME={env / 'data'} ")
+    if sys.platform == "win32":        # no VAR=value prefix there: the data dir is a --home argument (and "& " leads only for PowerShell)
+        assert f'--home "{P(str(env / "data"))}"' in usage_meter.command()
+        assert usage_meter.command().startswith("& ") == (not usage_meter._has_git_bash() and not __import__("shutil").which("dhi-orbit-statusline"))
+    else:
+        assert usage_meter.command().startswith(f"DHI_ORBIT_HOME={env / 'data'} ")
     assert f"-m {usage_meter.MARK}" in usage_meter.command()
 
 
@@ -151,6 +164,7 @@ def test_names_are_dhi_orbit_and_the_command_pins_the_new_home_variable(env):
 LEGACY_CMD = "CHATDASH_HOME=/old/data /usr/bin/python3 -m chatdash.statusline"
 
 
+@POSIX_ONLY
 def test_a_meter_installed_by_chatdash_is_detected_and_turn_on_rewrites_it_to_the_new_command(env):
     own = {"type": "command", "command": "echo mine", "padding": 1}
     d = acct(env, "old", {"statusLine": {"type": "command", "command": LEGACY_CMD, "padding": 3}})
@@ -178,6 +192,7 @@ def mtime(d):
     return os.stat(os.path.join(d, "settings.json")).st_mtime_ns
 
 
+@POSIX_ONLY
 def test_a_status_line_of_ours_pointing_at_a_missing_interpreter_is_not_on_and_is_repaired_keeping_the_original(env):
     own = {"type": "command", "command": "echo mine", "padding": 1}
     d = acct(env, "gone", {"statusLine": {"type": "command", "command": f"DHI_ORBIT_HOME=/x {stale_cmd()}", "padding": 3}})
@@ -197,6 +212,7 @@ def test_a_status_line_of_ours_pointing_at_a_missing_interpreter_is_not_on_and_i
     assert usage_meter.repair(d) is False and mtime(d) == after != before
 
 
+@POSIX_ONLY
 def test_listing_and_the_board_cache_repair_a_stale_status_line_once_and_start_login_self_repairs(env):
     d = acct(env, "gone", {"statusLine": {"type": "command", "command": stale_cmd()}})
     assert [a["usage_meter"] for a in accounts.listing(with_status=False)] == [

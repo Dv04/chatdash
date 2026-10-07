@@ -329,11 +329,11 @@ def test_meter_keeps_the_higher_reading_inside_one_window(tmp_path):
                 + json.dumps({"five_hour": {"used_percentage": five, "resets_at": r5}, "seven_day": {"used_percentage": seven, "resets_at": r7}}) + "\n")
     log = tmp_path / "meter.log"
     log.write_text(line("20:33:14", 100, 5000, 17, 9000) + line("20:50:29", 69, 5000, 11, 9000))
-    m = sources.Meter(str(log)).read()["/u/.claude-isro"]
+    m = sources.Meter(str(log)).read()[os.path.normpath("/u/.claude-isro")]
     assert (m["five"], m["seven"]) == (100, 17) and m["at"] == sources.iso_epoch("2026-10-06T20:33:14Z")
     with open(log, "a") as fh:                                     # a new window (different reset time) starts from its own figure
         fh.write(line("21:00:00", 5, 8000, 17, 9000))
-    m = sources.Meter(str(log)).read()["/u/.claude-isro"]
+    m = sources.Meter(str(log)).read()[os.path.normpath("/u/.claude-isro")]
     assert (m["five"], m["five_resets"], m["seven"]) == (5, 8000, 17)
 
 
@@ -424,7 +424,7 @@ def test_meter_keeps_last_reading_of_an_omitted_window(tmp_path):
     log.write_text("2026-10-02T07:25:24Z\t/u/.claude-echo\tsid\t{\"five_hour\":{\"used_percentage\":40,\"resets_at\":1000},"
                    "\"seven_day\":{\"used_percentage\":88,\"resets_at\":9000}}\n"
                    "2026-10-02T10:20:01Z\t/u/.claude-echo\tsid\t{\"seven_day\":{\"used_percentage\":89,\"resets_at\":9000}}\n")
-    m = sources.Meter(str(log)).read()["/u/.claude-echo"]
+    m = sources.Meter(str(log)).read()[os.path.normpath("/u/.claude-echo")]
     assert m["five"] == 40 and m["five_resets"] == 1000 and m["seven"] == 89 and m["five_omitted"]
     w = sources.window(m["five"], m["five_resets"], 2000)
     assert w["pct"] is None and w["since_reset"] is True

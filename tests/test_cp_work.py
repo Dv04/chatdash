@@ -131,7 +131,7 @@ def test_spawn_refuses_main_queues_near_and_starts_ok(tmp):
     code, res = work.spawn({"work_item": "PROJ-10", "seat": "work", "brief": "do y", "interview": True}, SNAP([]), runner=r)
     assert code == 200 and res["job_id"] == "1a2b3c4d"
     cmd, kw = r.calls[0]
-    assert kw["env"]["CLAUDE_CONFIG_DIR"].endswith("/.claude-work") and "CLAUDE_JOB_DIR" not in kw["env"]
+    assert kw["env"]["CLAUDE_CONFIG_DIR"].replace("\\", "/").endswith("/.claude-work") and "CLAUDE_JOB_DIR" not in kw["env"]
     assert cmd[-1].startswith("Before any work: interview the user") and cmd[-1].endswith("do y")
     seats_ok = {"chats": [], "seats": [{"seat": "alpha", "state": "ok"}]}
     assert work.drain_queue(seats_ok, runner=r)[0]["job_id"] == "1a2b3c4d"

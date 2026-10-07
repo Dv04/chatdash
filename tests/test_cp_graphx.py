@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dhi_orbit.cp import api, db, fileindex, graphx  # noqa: E402
 
-H = os.path.expanduser("~")
+H = os.path.expanduser("~").replace("\\", "/")      # the index stores posix-form paths on every system
 NOW = 2_000_000_000.0
 
 

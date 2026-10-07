@@ -19,6 +19,7 @@ def updir(tmp_path, monkeypatch):
     return tmp_path / "up"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes: Windows protects the upload folder with the user profile ACL")
 def test_save_writes_a_private_file_and_returns_its_path(updir):
     code, out = uploads.save("My Screen Shot (1).PNG", b"\x89PNG data")
     assert code == 200 and out["image"] is True and out["size"] == 9

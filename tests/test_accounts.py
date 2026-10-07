@@ -10,11 +10,11 @@ FAKE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "fak
 
 
 @pytest.fixture
-def env(tmp_path, monkeypatch):
+def env(tmp_path, monkeypatch, fake_claude_bin):
     monkeypatch.setenv("DHI_ORBIT_ACCOUNTS_ROOT", str(tmp_path / "home"))
     monkeypatch.setenv("DHI_ORBIT_HOME", str(tmp_path / "data"))
     monkeypatch.setenv("DHI_ORBIT_TRASH", str(tmp_path / "trash"))
-    monkeypatch.setenv("CLAUDE_BIN", FAKE)
+    monkeypatch.setenv("CLAUDE_BIN", fake_claude_bin)
     os.makedirs(tmp_path / "home")
     config._CACHE.clear()
     accounts._logins.clear()

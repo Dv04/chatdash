@@ -26,6 +26,7 @@ def conf(tmp_path, monkeypatch):
 def test_data_dir_defaults_to_dot_config_and_env_overrides(monkeypatch, tmp_path):
     monkeypatch.delenv("DHI_ORBIT_HOME", raising=False)
     monkeypatch.setenv("HOME", str(tmp_path / "fresh"))                       # no ~/.config/* at all
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "fresh"))                # Windows reads the home folder from here
     assert config.home() == str(tmp_path / "fresh" / ".config" / "dhi-orbit")
     monkeypatch.setenv("DHI_ORBIT_HOME", str(tmp_path / "x"))
     assert config.home() == str(tmp_path / "x")
@@ -35,6 +36,7 @@ def test_data_dir_defaults_to_dot_config_and_env_overrides(monkeypatch, tmp_path
 def test_legacy_home_dir_is_used_until_a_new_one_exists(monkeypatch, tmp_path):
     monkeypatch.delenv("DHI_ORBIT_HOME", raising=False)
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     old, new = tmp_path / ".config" / "chatdash", tmp_path / ".config" / "dhi-orbit"
     old.mkdir(parents=True)
     assert config.home() == str(old)                                          # a chatdash install that has not moved
@@ -64,6 +66,7 @@ def test_legacy_database_file_is_kept_until_a_new_one_exists(tmp_path):
     assert config.db_path() == str(h / "orbit.db")                            # the new name wins
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes: Windows protects the token with the user profile ACL, not mode 600")
 def test_token_is_created_on_first_run_with_mode_600_in_the_data_dir(tmp_path):
     assert not os.path.exists(config.home())
     tok = server.load_token()

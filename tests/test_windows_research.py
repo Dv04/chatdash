@@ -66,7 +66,7 @@ def test_windows_prefers_the_native_exe_over_an_npm_shim(tmp_path, monkeypatch):
     native = tmp_path / "nohome" / ".local" / "bin" / "claude.exe"
     native.parent.mkdir(parents=True)
     native.write_text("")
-    assert config.windows_native_claude(str(shim)) == str(native), "the native installer's exe wins"
+    assert os.path.normpath(config.windows_native_claude(str(shim))) == os.path.normpath(str(native)), "the native installer's exe wins"
     native.unlink()
     real.unlink()
     assert config.windows_native_claude(str(shim)) == str(shim), "nothing better: keep the shim, replies are then checked"

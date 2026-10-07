@@ -295,7 +295,9 @@ export class GLNebula {
   resize(cssW, cssH, dpr) {
     const gl = this.gl, W = Math.max(1, Math.round(cssW * dpr)), H = Math.max(1, Math.round(cssH * dpr));
     this.css = [cssW, cssH];
-    if (this.canvas.width === W && this.canvas.height === H && this.targets) return;
+    const k = this.gasScale || 0.75;
+    if (this.canvas.width === W && this.canvas.height === H && this.targets && this.builtK === k) return;    // a new gas scale rebuilds the targets
+    this.builtK = k;
     this.canvas.width = W; this.canvas.height = H;
     if (this.targets) this.targets.forEach((t) => { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); });
     const mk = (w, h) => {
@@ -309,7 +311,6 @@ export class GLNebula {
       return { tex, fb, w, h };
     };
     // gas at half the CSS size (dpr-independent cost), bloom chain below it
-    const k = this.gasScale || 0.75;
     const gw = Math.max(2, Math.round(cssW * k)), gh = Math.max(2, Math.round(cssH * k));
     this.targets = [mk(gw, gh)];
     let w = gw, h = gh;
@@ -394,11 +395,14 @@ export class GLNebula {
       gl.uniform1i(prog.u.uTex, 0); gl.uniform2f(prog.u.uTexel, 0.5 / src.w, 0.5 / src.h);
       this.quadDraw(prog);
     };
-    pass(P.pre, T[0], T[1]);
-    for (let i = 1; i < 5; i++) pass(P.down, T[i], T[i + 1]);
-    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
-    for (let i = 5; i > 1; i--) pass(P.up, T[i], T[i - 1]);
-    gl.disable(gl.BLEND);
+    const bloomK = 0.55 * (scene.bloom ?? 1);
+    if (bloomK > 0) {                  // glow off (quality setting) skips all nine passes; the present pass multiplies it by 0
+      pass(P.pre, T[0], T[1]);
+      for (let i = 1; i < 5; i++) pass(P.down, T[i], T[i + 1]);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+      for (let i = 5; i > 1; i--) pass(P.up, T[i], T[i - 1]);
+      gl.disable(gl.BLEND);
+    }
     // 4. present
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
@@ -408,7 +412,7 @@ export class GLNebula {
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, T[1].tex); gl.uniform1i(R.uBloom, 1);
     gl.uniform1f(R.uZone, scene.zone || 0); gl.uniform1f(R.uCssH, ch); gl.uniform1f(R.uAurora, scene.mode === "aurora" ? 1 : 0);
     gl.uniform3fv(R.uHue, scene.hue); gl.uniform3fv(R.uHue2, scene.hue2 || scene.hue); gl.uniform3fv(R.uOut, scene.out);
-    gl.uniform1f(R.uT, t); gl.uniform1f(R.uDark, scene.dark ? 1 : 0); gl.uniform1f(R.uBloomK, 0.55);
+    gl.uniform1f(R.uT, t); gl.uniform1f(R.uDark, scene.dark ? 1 : 0); gl.uniform1f(R.uBloomK, bloomK);
     gl.uniform2f(R.uPx, 1 / T[0].w, 1 / T[0].h); gl.uniform3fv(R.uInk, scene.ink || [0.1, 0.12, 0.25]);
     this.quadDraw(P.present);
     return true;

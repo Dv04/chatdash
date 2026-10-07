@@ -6,6 +6,7 @@
 import { h, ct, age, toast } from "./lib.js";
 import { post } from "./api.js";
 import { makeNebula } from "./gl-nebula.js";
+import { Q } from "./quality.js";
 import { fieldModel } from "./field.js";
 import { cardBody, timeoutLine } from "./cards.js";
 import { pace } from "./capacity.js";
@@ -65,11 +66,12 @@ export class Sky {
     this.canvas.addEventListener("click", (e) => this.click(e.clientX, e.clientY));
     addEventListener("keydown", (e) => this.key(e));
     this.loop = this.loop.bind(this);
+    Q.on((ch) => { if (!this.active) return; if (ch.some((k) => k === "res" || k === "detail")) this.layout(); this.sync(); this.still(); });
     window.__sky = this;
   }
 
   // ------------------------------------------------------------------ run control (identical rule to the board)
-  want() { return this.active && this.visible && this.focused && !this.reduced.matches && !!this.gl; }
+  want() { return this.active && this.visible && this.focused && !this.reduced.matches && Q.live && !!this.gl; }
   sync() {
     if (this.want()) { if (!this.raf) { this.last = 0; this.raf = requestAnimationFrame(this.loop); } }
     else if (this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; }
@@ -82,6 +84,7 @@ export class Sky {
   loop(now) {
     this.raf = 0;
     if (!this.want()) return;
+    if (this.last && now - this.last < Q.frameMs) { this.raf = requestAnimationFrame(this.loop); return; }    // frame rate limit
     this.frames++;
     const dt = this.last ? Math.min(100, now - this.last) : 16;
     this.last = now; this.t += dt;
@@ -136,9 +139,9 @@ export class Sky {
   }
 
   layout() {
-    const W = innerWidth, H = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2);
+    const W = innerWidth, H = innerHeight, dpr = Math.min(devicePixelRatio || 1, Q.res);
     this.W = W; this.H = H;
-    if (this.gl) { this.gl.gasScale = this.phoneQ.matches ? 0.4 : 0.5; this.gl.resize(W, H, dpr); }
+    if (this.gl) { this.gl.gasScale = (this.phoneQ.matches ? 0.4 : 0.5) * Q.detail; this.gl.resize(W, H, dpr); }
   }
 
   // ------------------------------------------------------------------ camera
@@ -202,7 +205,7 @@ export class Sky {
     }
     clusters.sort((a, b) => a.z - b.z);            // near first: the renderer composites front to back
     const c = this.cam;
-    if (this.gl) this.gl.render({ clusters, dark: this.col.dark, dust: this.phoneQ.matches ? 350 : 1300, ...this.col, still, ring: this.phoneQ.matches ? 0.7 : 1.2,
+    if (this.gl) this.gl.render({ clusters, dark: this.col.dark, dust: Math.round((this.phoneQ.matches ? 350 : 1300) * Q.density), bloom: Q.bloom, ...this.col, still, ring: this.phoneQ.matches ? 0.7 : 1.2,
       zone: 0, star: [c.yaw * 900 + c.x * 40, -c.pitch * 900 + c.y * 40] }, t);
     this.placeLabels();
   }

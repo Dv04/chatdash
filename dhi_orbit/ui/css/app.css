@@ -100,7 +100,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; text-wrap: ba
 .rail { position: sticky; top: 0; z-index: 10; display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto; gap: var(--s5); align-items: center;
   padding: var(--s3) var(--s5); background: color-mix(in oklch, var(--bg) 92%, transparent);
-  backdrop-filter: saturate(1.2) blur(10px); border-bottom: 1px solid var(--line); }
+  backdrop-filter: saturate(1.2) blur(calc(10px * var(--q-blur, 1))); border-bottom: 1px solid var(--line); }
 .rail .seats { grid-column: 1 / -1; overflow-x: auto; min-width: 0; max-width: calc(100vw - 2 * var(--s4)); }
 .rail > * { min-width: 0; }
 .health { justify-self: start; display: inline-flex; align-items: center; gap: var(--s2); padding: 5px 10px 5px 8px;
@@ -722,7 +722,7 @@ dialog.palette::backdrop { background: oklch(0% 0 0 / .35); }
 }
 
 /* Shortcut sheet (app.js showKeys) */
-.keys-sheet { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: var(--s4); background: color-mix(in oklch, var(--bg) 55%, transparent); backdrop-filter: blur(6px); }
+.keys-sheet { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: var(--s4); background: color-mix(in oklch, var(--bg) 55%, transparent); backdrop-filter: blur(calc(6px * var(--q-blur, 1))); }
 .keys-card { width: min(860px, 100%); max-height: calc(100vh - 2 * var(--s4)); overflow: auto; padding: var(--s4); border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); box-shadow: 0 20px 60px rgb(0 0 0 / .25); }
 .keys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--s4) var(--s5); margin-top: var(--s3); }
 .keys-grid h3 { margin: 0 0 var(--s2); font: var(--t-xs)/1.2 var(--sans, inherit); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3, var(--idle)); }
@@ -753,3 +753,9 @@ dialog.palette::backdrop { background: oklch(0% 0 0 / .35); }
   .spawn-form select { height: 40px; }
   .spawn-form label.row { min-height: 32px; align-items: center; }
 }
+
+/* Settings > Quality: a slider with its step labels under it */
+.q-row { flex-wrap: wrap; }
+.q-ctl { flex: 0 1 260px; min-width: 200px; display: grid; gap: 2px; }
+.q-range { width: 100%; margin: 0; accent-color: var(--action); }
+.q-ticks { display: flex; justify-content: space-between; font-size: var(--t-xs); color: var(--ink-3); font-variant-numeric: tabular-nums; }

@@ -10,6 +10,7 @@
 // Stage 2 views reuse the engine with their own camera (Field.camera: the world rect shown in the band).
 
 import { makeNebula } from "./gl-nebula.js";
+import { Q } from "./quality.js";
 import { splitNeeds } from "./board.js";
 import { noReading, unknownLabel } from "./lib.js";
 
@@ -127,10 +128,15 @@ export class Field {
     this.reduced.addEventListener("change", () => { this.sync(); this.paintStill(); });
     addEventListener("resize", () => { this.layout(); this.paintStill(); });
     this.loop = this.loop.bind(this);
+    Q.on((ch) => {            // a quality slider moved: rebuild only what it changes
+      if (ch.includes("density")) { this.stars = null; if (this.model) this.build(); }
+      if (this.active) this.layout();
+      this.sync(); this.paintStill();
+    });
   }
 
   // Full motion only while the look is on, the tab is visible and the window focused, and motion is allowed.
-  want() { return this.active && this.visible && this.focused && this.inView && !this.reduced.matches; }
+  want() { return this.active && this.visible && this.focused && this.inView && !this.reduced.matches && Q.live; }
   sync() {
     if (this.want()) { if (!this.raf) { this.last = 0; this.raf = requestAnimationFrame(this.loop); } }
     else if (this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; }
@@ -155,7 +161,7 @@ export class Field {
   }
 
   layout() {
-    const dpr = Math.min(devicePixelRatio || 1, this.phone() ? 2 : 1.5);
+    const dpr = Math.min(devicePixelRatio || 1, this.phone() ? 2 : 1.5, Q.res);
     const W = document.documentElement.clientWidth, H = innerHeight;
     if (this.canvas.width !== Math.round(W * dpr) || this.canvas.height !== Math.round(H * dpr)) {
       this.canvas.width = Math.round(W * dpr); this.canvas.height = Math.round(H * dpr);
@@ -169,14 +175,14 @@ export class Field {
       const g = { x: 0, y: this.rect.y - 40, w: W, h: this.rect.h + 40 };   // 40 px bleed: nebula.css --nb-win-clip-gl must match
       this.glRect = g;
       Object.assign(this.glCanvas.style, { left: g.x + "px", top: g.y + "px", width: g.w + "px", height: g.h + "px" });
-      this.gl.gasScale = this.phone() ? 0.5 : 0.75;
-      this.gl.resize(g.w, g.h, Math.min(devicePixelRatio || 1, 2));
+      this.gl.gasScale = (this.phone() ? 0.5 : 0.75) * Q.detail;
+      this.gl.resize(g.w, g.h, Math.min(devicePixelRatio || 1, Q.res));
     }
     this.place();
   }
 
   buildStars() {
-    const n = this.phone() ? 70 : 210, r = rng("stars");
+    const n = Math.round((this.phone() ? 70 : 210) * Q.density), r = rng("stars");
     const s = { phone: this.phone(), x: new Float32Array(n), y: new Float32Array(n), v: new Float32Array(n), z: new Float32Array(n) };
     for (let i = 0; i < n; i++) { s.x[i] = r(); s.y[i] = r(); s.v[i] = 0.000004 + r() * 0.00001; s.z[i] = 0.6 + r() * 1.2; }
     this.stars = s;
@@ -200,7 +206,7 @@ export class Field {
 
   // Particles per cluster. Count and radius scale with the share of the week left; unknown has none.
   build() {
-    const k = this.phone() ? 1 / 3 : 1;
+    const k = (this.phone() ? 1 / 3 : 1) * Q.density;
     const prev = new Map(this.clusters.map((c) => [c.seat, c]));
     this.clusters = this.model.seats.map((s, i) => {
       const c = { ...s, i, n: 0 };
@@ -284,6 +290,7 @@ export class Field {
   loop(t) {
     this.raf = 0;
     if (!this.want()) return;
+    if (this.last && t - this.last < Q.frameMs) { this.raf = requestAnimationFrame(this.loop); return; }    // frame rate limit
     this.frames++;
     if (this.last) {
       const dt = t - this.last;
@@ -402,7 +409,7 @@ export class Field {
       return { x: c.x - G.x, y: c.y - G.y, R: c.R * 1.15, left: (c.left || 0) / 100, kind: c.kind, seed: c.i * 3.7 + 1.3, lights };
     });
     const L = this.lin;
-    this.gl.render({ clusters, dark: this.col.dark, dust: this.phone() ? 300 : 900, hue: L.hue, hue2: L.hue2, out: L.out, out2: L.out2,
+    this.gl.render({ clusters, dark: this.col.dark, dust: Math.round((this.phone() ? 300 : 900) * Q.density), bloom: Q.bloom, hue: L.hue, hue2: L.hue2, out: L.out, out2: L.out2,
       unk: L.unk, light: L.light, need: L.need, ink: L.ink, still, ring: this.phone() ? 0.55 : 1, zone: this.zone() }, t);
     this.labels(pts, B);
     this.drawn = drawn;

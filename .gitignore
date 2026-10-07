@@ -37,3 +37,7 @@ tools/acceptance/s[0-9]*/
 *.png
 *.jpg
 *.jpeg
+
+# shipped brand and dashboard icons
+!docs/brand/*.png
+!dhi_orbit/ui/icon-*.png

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>DHI Orbit: other AIs</title>
+<link rel="icon" href="data:,">
+<script>window.CP_TOKEN = "__TOKEN__";</script>
+<style>
+:root { --bg:#f6f7f9; --panel:#fff; --panel2:#eef0f3; --line:#d9dde3; --ink:#161a20; --ink2:#47505c; --ink3:#6b7480;
+  --blue:#2457d6; --green:#17803d; --amber:#a15c00; --red:#c0302b; }
+@media (prefers-color-scheme: dark) { :root { --bg:#14161a; --panel:#1b1e23; --panel2:#22262c; --line:#2f343b; --ink:#e8eaee;
+  --ink2:#b4bbc6; --ink3:#8f98a5; --blue:#6f95ff; --green:#4cc27a; --amber:#e0a23a; --red:#ff7a72; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+header { display:flex; align-items:center; gap:14px; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); position:sticky; top:0; z-index:2; flex-wrap:wrap; }
+header h1 { font-size:15px; margin:0; font-weight:650; }
+header a { color:var(--blue); text-decoration:none; }
+.tabs { display:flex; gap:6px; flex-wrap:wrap; }
+.tab { border:1px solid var(--line); background:var(--panel2); color:var(--ink2); padding:3px 11px; border-radius:99px; cursor:pointer; font:inherit; }
+.tab[aria-pressed="true"] { background:var(--blue); border-color:var(--blue); color:#fff; }
+.sel { margin-left:auto; color:var(--ink3); font-size:12px; }
+.sel select { font:inherit; background:var(--panel2); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:2px 4px; }
+main { display:grid; grid-template-columns:minmax(280px,380px) 1fr; gap:0; min-height:calc(100vh - 54px); }
+#list { border-right:1px solid var(--line); overflow:auto; max-height:calc(100vh - 54px); }
+.row { display:block; width:100%; text-align:left; border:0; border-bottom:1px solid var(--line); background:transparent; color:inherit; padding:9px 14px; cursor:pointer; font:inherit; }
+.row:hover { background:var(--panel2); } .row[aria-current="true"] { background:var(--panel2); box-shadow:inset 3px 0 0 var(--blue); }
+.row .t { display:flex; gap:8px; align-items:baseline; }
+.row .n { font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.row .m { color:var(--ink3); font-size:12px; display:flex; gap:10px; flex-wrap:wrap; }
+.row .f { color:var(--ink2); font-size:12.5px; margin-top:2px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.pill { font-size:11px; padding:0 7px; border-radius:99px; border:1px solid var(--line); color:var(--ink2); white-space:nowrap; }
+.working { color:var(--green); border-color:var(--green); } .failed { color:var(--red); border-color:var(--red); } .stopped { color:var(--amber); border-color:var(--amber); }
+#view { padding:16px 20px 120px; max-width:900px; }
+#view h2 { margin:0 0 2px; font-size:17px; } .sub { color:var(--ink3); font-size:12.5px; margin-bottom:12px; word-break:break-all; }
+.turn { margin:10px 0; padding:9px 12px; border-radius:10px; border:1px solid var(--line); background:var(--panel); white-space:pre-wrap; word-break:break-word; }
+.turn.user { background:var(--panel2); } .turn .who { color:var(--ink3); font-size:11.5px; margin-bottom:2px; text-transform:uppercase; letter-spacing:.04em; }
+.turn.commentary { opacity:.7; font-size:13px; }
+.err { color:var(--red); margin:8px 0; }
+form { position:sticky; bottom:0; background:var(--bg); padding:10px 0 14px; }
+textarea { width:100%; min-height:70px; resize:vertical; background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:9px 11px; font:inherit; }
+.bar { display:flex; gap:10px; align-items:center; margin-top:6px; }
+button.go { background:var(--blue); color:#fff; border:0; padding:7px 16px; border-radius:8px; font:inherit; cursor:pointer; } button.go:disabled { opacity:.5; cursor:default; }
+#msg { color:var(--ink2); font-size:13px; } .empty { padding:30px 20px; color:var(--ink3); }
+@media (max-width:760px) { main { grid-template-columns:1fr; } #list { max-height:42vh; border-right:0; border-bottom:1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Other AIs</h1>
+  <a href="/v2/">&larr; Claude board</a>
+  <div class="tabs" id="tabs" role="group" aria-label="Provider"></div>
+  <label class="sel">Show <select id="hours"><option value="24">24 hours</option><option value="168" selected>7 days</option><option value="720">30 days</option></select></label>
+</header>
+<main>
+  <nav id="list" aria-label="Chats"></nav>
+  <section id="view"><div class="empty">Pick a chat. Replies are sent by hand; nothing here acts on a chat by itself.</div></section>
+</main>
+<script src="js/ai.js"></script>
+</body>
+</html>

@@ -8,6 +8,7 @@ import { get } from "./api.js";
 import { micFor } from "./dictate.js";
 import { renderMode, MODES, filesBrowser } from "./gx.js";
 import { md } from "./md.js";
+import { Q } from "./quality.js";
 
 const KIND_EDGES = { tree: new Set(["runs_on", "spawned_by"]), work: new Set(["belongs_to", "collides_with", "waits_on", "spawned_by"]),
   repo: new Set(["in_repo", "spawned_by", "collides_with"]) };
@@ -68,6 +69,7 @@ export class Graph {
     this.ctx = this.canvas.getContext("2d");
     this.mctx = this.mini.getContext("2d");
     new ResizeObserver(() => this.resize()).observe(this.stage);
+    Q.on((ch) => { if (ch.includes("res")) this.resize(); });
     this.bind();
   }
 
@@ -523,7 +525,7 @@ export class Graph {
   fps() { if (!this.frames.length) return null; const avg = this.frames.reduce((a, b) => a + b) / this.frames.length; return Math.round(1000 / avg); }
 
   resize() {
-    const r = this.stage.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    const r = this.stage.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, Q.res < 2 ? Q.res : 3);   // from 200% up the map keeps its old sharpness
     this.W = r.width; this.H = r.height;
     this.canvas.width = r.width * dpr; this.canvas.height = r.height * dpr;
     this.canvas.style.width = r.width + "px"; this.canvas.style.height = r.height + "px";

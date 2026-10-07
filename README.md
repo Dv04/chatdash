@@ -264,6 +264,12 @@ macOS-only parts: notifications use `osascript` there (a tray balloon on Windows
 terminal works on macOS and Windows, and the Schedules panel uses `launchctl`.
 DHI Orbit is developed on macOS; a clean pipx install on Linux was tested end to end (accounts, sign-in, board, nebula).
 
+## Quality settings
+
+Settings > Quality scales how much the background, Sky and Graph draw, per browser: frame rate limit, render resolution, nebula detail,
+particles, glow, glass blur, and switches for the animated background and interface animations. Presets Low, Balanced (the default,
+identical to before), High and Ultra set them all at once. Turn them up on a strong GPU, down on a modest laptop or battery.
+
 ## Development
 
 ```sh

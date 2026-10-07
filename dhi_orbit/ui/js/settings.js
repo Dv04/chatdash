@@ -7,6 +7,7 @@ import { seatsAtLimit, limitWord } from "./limits.js";
 import { get, put, post } from "./api.js";
 import { resumeSeg } from "./chat.js";
 import { renderAccounts } from "./accounts.js";
+import { Q, KNOBS, TOGGLES, PRESETS } from "./quality.js";
 
 const LOOK_NAME = { current: "Plain", nebula: "Nebula" };   // stored values stay "current" / "nebula"
 
@@ -92,6 +93,7 @@ export async function renderSettings(el, ui) {
         h("div", { class: "seg", role: "radiogroup", "aria-label": "Board look" },
           ["current", "nebula"].map((v) => h("button", { role: "radio", "aria-checked": String(ui.look() === v), "aria-pressed": String(ui.look() === v),
             onclick: () => { if (ui.look() !== v) { ui.setLook(v); redraw(); } } }, LOOK_NAME[v])))))),
+    qualitySection(),
     h("section", { class: "group" }, h("h3", {}, "Notifications"),
       h("ul", { class: "set-list" }, h("li", { class: "set-row" },
         h("div", { class: "set-text" }, h("h3", {}, "Focus mode", h("span", { class: "chip " + (f.on ? "risk-low" : "") }, f.on ? "on" : "off")),
@@ -101,6 +103,42 @@ export async function renderSettings(el, ui) {
     h("section", { class: "group" }, h("h3", {}, "About"),
       h("p", { class: "hint pad" }, "DHI Orbit, built by Dev Sanghvi at ",
         h("a", { href: "https://dhi-tech.com", target: "_blank", rel: "noopener" }, "DHI"), "."))));
+}
+
+// Quality: how much the background, Sky and Graph draw. Saved in this browser only; every change applies at once. The sliders
+// update in place (no redraw of the page), so a drag keeps focus. "Balanced" is what Orbit drew before this section existed.
+function qualitySection() {
+  const preset = h("span", { class: "chip" }), outs = {}, ranges = {}, bools = {};
+  const sync = () => {
+    preset.textContent = Q.preset();
+    for (const k of Object.keys(KNOBS)) { ranges[k].value = String(Q.idx[k]); outs[k].textContent = KNOBS[k][1][Q.idx[k]][0]; }
+    for (const k of Object.keys(TOGGLES)) for (const b of bools[k]) { const on = (b.dataset.v === "on") === Q.idx[k]; b.setAttribute("aria-checked", String(on)); b.setAttribute("aria-pressed", String(on)); }
+    for (const b of presetBtns) { const on = Q.preset() === b.dataset.p; b.setAttribute("aria-checked", String(on)); b.setAttribute("aria-pressed", String(on)); }
+  };
+  const row = (title, hint, control, out) => h("li", { class: "set-row q-row" },
+    h("div", { class: "set-text" }, h("h3", {}, title, out), h("p", { class: "hint" }, hint)), control);
+  const sliders = Object.entries(KNOBS).map(([k, [label, steps, , hint]]) => {
+    outs[k] = h("span", { class: "chip" });
+    ranges[k] = h("input", { type: "range", class: "q-range", min: "0", max: String(steps.length - 1), step: "1", "aria-label": label,
+      oninput: (e) => { Q.set({ [k]: +e.target.value }); sync(); } });
+    const ticks = h("div", { class: "q-ticks", "aria-hidden": "true" }, steps.map((st) => h("span", {}, st[0])));
+    return row(label, hint, h("div", { class: "q-ctl" }, ranges[k], ticks), outs[k]);
+  });
+  const toggles = Object.entries(TOGGLES).map(([k, [label, , hint]]) => {
+    bools[k] = ["on", "off"].map((v) => h("button", { role: "radio", dataset: { v }, onclick: () => { Q.set({ [k]: v === "on" }); sync(); } }, v));
+    return row(label, hint, h("div", { class: "seg", role: "radiogroup", "aria-label": label }, bools[k]));
+  });
+  const presetBtns = Object.keys(PRESETS).map((name) => h("button", { role: "radio", dataset: { p: name }, onclick: () => { Q.set(PRESETS[name]); sync(); } }, name));
+  const sec = h("section", { class: "group", id: "quality" }, h("h3", {}, "Quality"),
+    h("p", { class: "hint pad" }, "Turn these up on a strong GPU for a sharper, denser sky, or down on a modest laptop, a phone or battery. ",
+      "They change only how much is drawn, never what the board says. Saved in this browser only."),
+    h("ul", { class: "set-list" },
+      row("Preset", "Sets every control below at once; Balanced is the default.", h("div", { class: "seg", role: "radiogroup", "aria-label": "Quality preset" }, presetBtns), preset),
+      sliders, toggles,
+      h("li", { class: "set-row" }, h("div", { class: "set-text" }, h("p", { class: "hint" }, "The glow, nebula, particles and frame rate apply to the background (Nebula look) and Sky; resolution also applies to Graph. Glass blur and animations apply everywhere.")),
+        h("button", { class: "btn", onclick: () => { Q.reset(); sync(); } }, "Reset to default"))));
+  sync();
+  return sec;
 }
 
 // Report a bug / send feedback: both open a prefilled new issue on the project's GitHub (no mail, no server, nothing is sent

@@ -125,7 +125,7 @@ def mode(name: str) -> str:
 
 
 DEFAULT_SETTINGS = {"focus": {"on": False, "min_age_min": 15, "windows": ["10:00", "14:00"]},
-                    "pace": {"pct_per_day": round(100 / 7, 1)}}   # even weekly spend: 100% of the 7d limit over 7 days
+                    "pace": {"pct_per_day": 15.0}}   # 5% of the 7d limit unlocks every 8 h (15% a day), first block open at window start
 
 
 def settings() -> dict:

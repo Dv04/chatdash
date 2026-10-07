@@ -323,7 +323,7 @@ export class Sky {
       return h("div", { class: "sky-win" }, h("span", { class: "k" }, lbl), h("b", {}, k.pct == null ? "?" : `${Math.round(k.pct)}%`),
         h("span", {}, k.pct == null ? (k.since_reset ? "reset since the last reading" : "no reading") : k.resets_at ? `resets ${ct(k.resets_at, true)} (in ${age(k.resets_at - now)})` : ""));
     };
-    const p = row.seven_day ? pace(row, now, (this.ui.pace && this.ui.pace.pct_per_day) || 14.3) : { state: "unknown" };
+    const p = row.seven_day ? pace(row, now, (this.ui.pace && this.ui.pace.pct_per_day) || 15) : { state: "unknown" };
     const chats = s.chats.map((c) => {
       const it = c.needs && this.itemFor(c.id);
       const full = row.state === "blocked" && (c.state === "working" || c.needs);   // seat at its limit: the chat cannot progress
@@ -337,7 +337,7 @@ export class Sky {
       h("p", { class: "sky-state k-" + s.kind }, s.sub),
       w(row.seven_day, "7d"), w(row.five_hour, "5h"),
       row.resume_at && h("p", { class: "sky-resume" }, `Resumes ${ct(row.resume_at)}`),
-      p.state !== "unknown" && !row.excluded && h("p", { class: "sky-pace" }, p.state === "use" ? `Use first: about ${Math.round(p.extra)}% spare at the even pace` :
+      p.state !== "unknown" && !row.excluded && h("p", { class: "sky-pace" }, p.state === "use" ? `Use first: about ${Math.round(p.extra)}% available now` :
         p.state === "slow" ? "Ahead of pace: slow down here" : p.state === "spent" ? "7-day limit used up" : "On pace"),
       row.meter_age_min != null && h("p", { class: "sky-meta" }, `Meter reading ${row.meter_age_min >= 120 ? Math.round(row.meter_age_min / 60) + " h" : row.meter_age_min + " min"} old`,
         row.excluded ? ". Read-only seat: nothing here acts on it." : ""),

@@ -417,6 +417,20 @@ export function renderSide(el, graph, ui, opts = {}) {
       })),
       folded > 0 && h("button", { class: "idle-fold", onclick: () => ui.expand(key) }, `${folded} idle`));
   });
+  // Chats with no process and no job: not on the graph, but never invisible. Folded under their count; one click lists them.
+  const closed = (graph.closed || []).filter((c) => !q || `${c.label} ${c.seat}`.toLowerCase().includes(q));
+  if (closed.length) {
+    const open = ui.expanded.has("closed") || (q && closed.length);
+    const total = Math.max(graph.closed_total || 0, closed.length);
+    blocks.push(h("section", { class: "group" },
+      h("h3", {}, "Closed", h("span", { class: "n" }, `${total}`)),
+      open ? h("ul", { class: "sess" }, closed.map((c) => h("li", {},
+        h("span", { class: "st stopped", "aria-hidden": "true", title: "closed" }),
+        h("a", { class: "nm", href: "#/chat/" + encodeURIComponent(c.session_id), dataset: { sid: c.session_id },
+          "aria-current": c.session_id === opts.cur ? "true" : "false" }, c.label, h("span", { class: "sr" }, ", closed")),
+        h("span", { class: "rt" }, `${c.seat}${c.activity ? ", " + age(Date.now() / 1000 - c.activity) : ""}`))))
+        : h("button", { class: "idle-fold", onclick: () => ui.expand("closed") }, `${total} closed, show`)));
+  }
   if (q && !blocks.length) blocks.push(h("p", { class: "hint" }, `No chat matches "${filt.value.trim()}".`));
   if (filt.parentNode !== el) el.replaceChildren(head, filt, ...blocks);
   else { for (const n of [...el.childNodes]) if (n !== filt) n.remove(); el.insertBefore(head, filt); el.append(...blocks); }

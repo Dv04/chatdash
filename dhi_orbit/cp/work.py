@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import json
 import os
+import pathlib
 import re
 import subprocess
 import threading
@@ -406,19 +408,89 @@ SCRUB = ("CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_
          "CLAUDE_PID", "CLAUDE_CODE_ENTRYPOINT", "CLAUDECODE", "CLAUDE_JOB_DIR")
 
 
-def safe_cwd(cwd: str | None) -> str | None:
-    """A folder you picked on the graph (a repo or a file's folder): must exist and sit under the home dir."""
+def _claude_json(seat: str | None) -> str:
+    """Claude Code's per-config-dir state file: ~/.claude.json for the main seat, <config dir>/.claude.json for a named one."""
+    return os.path.join(HOME if not seat or seat == "main" else os.path.join(HOME, f".claude-{seat}"), ".claude.json")
+
+
+def trusted_folders(seat: str | None = None) -> list[str]:
+    """Folders whose trust question Claude Code's user already accepted (projects[...].hasTrustDialogAccepted). Claude
+    keeps them with forward slashes on Windows; they are returned as native real paths."""
+    try:
+        with open(_claude_json(seat), encoding="utf-8") as fh:
+            projects = (json.load(fh) or {}).get("projects") or {}
+    except (OSError, ValueError, AttributeError):
+        return []
+    return [os.path.realpath(k) for k, v in projects.items() if isinstance(v, dict) and v.get("hasTrustDialogAccepted")]
+
+
+def _inside(p: str, root: str) -> bool:
+    p, root = os.path.normcase(p), os.path.normcase(root)
+    return p == root or p.startswith(root.rstrip("\\/") + os.sep)
+
+
+def is_trusted(path: str, seat: str | None = None) -> bool:
+    """A folder is trusted when it, or a folder above it, was accepted. The home folder itself never counts: Claude Code 2.1.292
+    trusts it one session at a time and refuses a background session there."""
+    p = os.path.realpath(path)
+    if os.path.normcase(p) == os.path.normcase(os.path.realpath(HOME)):
+        return False
+    return any(_inside(p, t) for t in trusted_folders(seat))
+
+
+def safe_cwd(cwd: str | None, seat: str | None = None) -> str | None:
+    """A folder picked on the graph or typed in the New-chat dialog: it must exist, have no hidden (.name) part, and be under the
+    home folder or a folder Claude Code already trusts (a project on another drive, such as E: on Windows)."""
     if not cwd:
         return None
     p = os.path.realpath(os.path.expanduser(cwd))
     if os.path.isfile(p):
         p = os.path.dirname(p)
-    return p if os.path.isdir(p) and p.startswith(HOME + os.sep) and not re.search(r"[\\/]\.", p[len(HOME):]) else None
+    if not os.path.isdir(p):
+        return None
+    home = os.path.realpath(HOME)
+    under_home = _inside(p, home)
+    below = p[len(home):] if under_home else p
+    if any(part.startswith(".") for part in pathlib.PurePath(below).parts[0 if under_home else 1:] if part not in (os.sep, "\\", "/")):
+        return None
+    return p if under_home or is_trusted(p, seat) else None
+
+
+def recent_folder(snap: dict, seat: str | None = None) -> str | None:
+    """The folder of the most recently active chat that Claude Code trusts and that still exists: where a new chat starts when none was
+    picked and `default_cwd` is not set (the home folder cannot start a background session)."""
+    for c in sorted(snap.get("chats") or [], key=lambda c: -(c.get("activity") or 0)):
+        d = c.get("cwd")
+        if d and os.path.isdir(d) and is_trusted(d, seat) and safe_cwd(d, seat):
+            return safe_cwd(d, seat)
+    return None
+
+
+def folders(snap: dict, seat: str | None = None) -> dict:
+    """What the New-chat dialog offers: where a chat starts by default, and the folders of recent chats and trusted projects."""
+    out, seen = [], set()
+    def add(path, last=None):
+        p = safe_cwd(path, seat)
+        if p and is_trusted(p, seat) and os.path.normcase(p) not in seen and len(out) < 40:     # only folders a background chat can start in
+            seen.add(os.path.normcase(p))
+            out.append({"path": p, "trusted": True, "last": last})
+    for c in sorted(snap.get("chats") or [], key=lambda c: -(c.get("activity") or 0)):
+        if c.get("cwd"):
+            add(c["cwd"], c.get("activity"))
+    for t in trusted_folders(seat):
+        add(t)
+    return {"default": start_folder(snap, seat), "configured": bool(config.get("default_cwd")), "folders": out}
+
+
+def start_folder(snap: dict, seat: str | None, picked: str | None = None) -> str:
+    """Where a new chat starts: the folder picked, else `default_cwd` from the config, else the newest trusted project folder, else home."""
+    return safe_cwd(picked, seat) or (os.path.expanduser(config.get("default_cwd")) if config.get("default_cwd") else None) \
+        or recent_folder(snap, seat) or config.default_cwd()
 
 
 def launch_cmd(wi: str | None, seat: str, brief_text: str, cwd: str | None = None) -> tuple[list, str, dict]:
     title = f"{wi} session" if wi else "DHI Orbit session"
-    cwd = safe_cwd(cwd) or config.default_cwd()
+    cwd = safe_cwd(cwd, seat) or config.default_cwd()
     env = {k: v for k, v in os.environ.items() if k not in SCRUB}
     if seat == "main":
         env.pop("CLAUDE_CONFIG_DIR", None)           # ~/.claude is the default dir: unset, not set
@@ -460,15 +532,16 @@ def spawn(body: dict, snap: dict, runner=subprocess.run) -> tuple[int, dict]:
         text += f"\n\n(Started from the DHI Orbit board as a child of session {body['parent']}.)"
     now = time.time()
     note = None
-    if body.get("cwd") and not safe_cwd(body["cwd"]):
-        note = (f"folder {body['cwd']} was not used (it must be an existing folder under your home folder, not a "
-                f"hidden one); the chat starts in {config.default_cwd()}")
+    folder = start_folder(snap, seat, body.get("cwd"))
+    if body.get("cwd") and not safe_cwd(body["cwd"], seat):
+        note = (f"folder {body['cwd']} was not used (it must be an existing folder, not a hidden one, under your home folder or "
+                f"one Claude Code already trusts); the chat starts in {folder}")
     if holds(st):
         db.execute("INSERT INTO cp_spawn_queue(work_item, seat, brief, interview, parent, created_at, cwd) VALUES(?,?,?,?,?,?,?)",
-                   (wi, seat, text, 1 if body.get("interview") else 0, body.get("parent"), now, safe_cwd(body.get("cwd"))))
+                   (wi, seat, text, 1 if body.get("interview") else 0, body.get("parent"), now, folder))
         db.log_auto("spawn", "manual", None, seat, "queued", f"seat {st['state']}", {"work_item": wi})
         return 200, {"ok": True, "queued": True, "seat": seat, **({"note": note} if note else {})}
-    code, res = _start(wi, seat, text, runner, body.get("cwd"))
+    code, res = _start(wi, seat, text, runner, folder)
     return code, ({**res, "note": note} if note and code == 200 else res)
 
 
@@ -482,6 +555,10 @@ def _start(wi, seat, text, runner, cwd=None):
     m = re.search(r"attach ([0-9a-f]{8})", out) or re.search(r"backgrounded\W+(?:\x1b\[[0-9;]*m)?([0-9a-f]{8})", out)
     if r.returncode != 0 or not m:
         db.log_auto("spawn", "manual", None, seat, "failed", out[-300:], {"work_item": wi})
+        if "not trusted" in out.lower():
+            return 409, {"error": f"Claude Code will not start a background chat in {cwd}: the folder is not trusted (the home folder "
+                                  "never is). Pick a project folder you have opened in `claude` before, or set default_cwd in the "
+                                  "config. (" + out.strip()[-160:] + ")"}
         return 409, {"error": out[-300:] or "claude --bg did not start"}
     db.log_auto("spawn", "manual", None, seat, "started", f"job {m.group(1)}", {"work_item": wi})
     return 200, {"ok": True, "queued": False, "job_id": m.group(1), "seat": seat}

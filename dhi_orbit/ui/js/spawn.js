@@ -43,6 +43,13 @@ export async function spawnDialog({ workItem, seat, parent, seats, onDone, brief
   const sync = () => { const r = interviewRule(ta.value); why.textContent = r ? `on because the ${r}` : "off: short, routine brief"; iv.checked = !!r; };
   ta.addEventListener("input", sync);
   sync();
+  // Where the chat starts. Claude Code will not start a background chat in the home folder, so the default is the newest trusted
+  // project folder (or `default_cwd` from the config); the list holds recent chats' folders and trusted projects.
+  let fd = { default: "", folders: [] };
+  try { fd = await get("folders?seat=" + encodeURIComponent(pick || (seats[0] && seats[0].seat) || "")); } catch { /* no suggestions: the field stays free text */ }
+  const folderIn = h("input", { type: "text", class: "free", id: "sp-folder", list: "sp-folders", value: cwd || fd.default || "", spellcheck: "false",
+    "aria-label": "Folder", placeholder: "Folder the chat starts in" });
+  const folderList = h("datalist", { id: "sp-folders" }, (fd.folders || []).map((f) => h("option", { value: f.path }, f.trusted ? "trusted" : "")));
   const warn = h("p", { class: "hint", id: "sp-warn" });
   const seatWarn = () => {
     const s = seats.find((x) => x.seat === sel.value);
@@ -69,7 +76,7 @@ export async function spawnDialog({ workItem, seat, parent, seats, onDone, brief
     e.preventDefault();
     start.disabled = true;
     try {
-      const res = await post("sessions", { work_item: curWi || undefined, seat: sel.value, brief: ta.value.trim(), interview: iv.checked, parent, cwd });
+      const res = await post("sessions", { work_item: curWi || undefined, seat: sel.value, brief: ta.value.trim(), interview: iv.checked, parent, cwd: folderIn.value.trim() || undefined });
       toast(res.queued ? `Queued on ${sel.value}: starts when the seat has headroom` : `Started on ${sel.value} (job ${res.job_id || "?"})`);
       dlg.close();
       onDone && onDone(res);
@@ -80,7 +87,8 @@ export async function spawnDialog({ workItem, seat, parent, seats, onDone, brief
   dlg.replaceChildren(h("form", { method: "dialog", class: "spawn-form" },
     h("h3", {}, title || (workItem ? `New session: ${(wi && wi.title) || workItem}` : "New session")),
     parent && h("p", { class: "hint" }, `Child of ${parent}`),
-    cwd && h("p", { class: "hint" }, `Starts in ${cwd.replace(/^\/Users\/[^/]+/, "~")}`),
+    h("label", { for: "sp-folder" }, "Folder"), folderIn, folderList,
+    h("p", { class: "hint" }, "Claude Code starts a background chat only in a folder it trusts: a project you have opened in `claude` before, not your home folder."),
     h("label", { for: "sp-wi" }, "Work item"), wsel,
     h("label", { for: "sp-seat" }, "Seat"), sel, warn,
     h("label", { for: "sp-brief" }, "Brief (from the work item's state of play; edit freely)"), h("div", { class: "replyrow" }, ta, micFor(ta)),

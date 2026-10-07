@@ -541,7 +541,10 @@ def main() -> None:
     threading.Thread(target=st.loop, args=(a.every,), daemon=True).start()
     ThreadingHTTPServer.request_queue_size = 128   # the default of 5 resets a browser's parallel module fetches
     srv = QuietServer(("127.0.0.1", a.port), make_handler(st, token, a.port))
-    print(f"DHI Orbit on http://127.0.0.1:{a.port}/  ({len(st.chats)} chats, data dir {config.home()})", flush=True)
+    live = sum(1 for c in st.chats if c.get("kind") in ("bg", "interactive"))
+    print(f"DHI Orbit on http://127.0.0.1:{a.port}/  ({len(st.chats)} chats found in your Claude folders: {live} open, "
+          f"{len(st.chats) - live} closed or headless, the closed ones are folded under 'closed' in the chat list; "
+          f"Orbit's own data is in {config.home()})", flush=True)
     if a.open:
         import webbrowser
         try:

@@ -313,6 +313,7 @@ def graph(snap: dict, now: float) -> dict:
         edges.append({"from": sid, "to": f"seat:{c['account']}", "kind": "runs_on"})
         if wi:
             edges.append({"from": sid, "to": f"work_item:{wi}", "kind": "belongs_to"})
+    closed = sorted((c for c in snap["chats"] if c["kind"] == "closed" and not visible(c)), key=lambda c: -(c.get("activity") or 0))
     titles = {w["id"]: w["title"] for w in db.rows("SELECT id, title FROM work_items")}
     for wi, cs in sorted(wis.items()):
         state = ("needs_you" if any(c["session_id"] in ny for c in cs) else
@@ -352,7 +353,11 @@ def graph(snap: dict, now: float) -> dict:
         pass
     ids = {n["id"] for n in nodes}
     edges = [e for e in edges if e["from"] in ids and e["to"] in ids]
-    return {"generated_at": now, "snapshot_at": snap.get("at"), "nodes": nodes, "edges": edges}
+    # Chats with no process and no job are not graph nodes (they would bury the running ones), but the side list folds them under
+    # "N closed" so a machine that only has old chats still shows them.
+    return {"generated_at": now, "snapshot_at": snap.get("at"), "nodes": nodes, "edges": edges,
+            "closed": [{"session_id": c["session_id"], "key": c["key"], "label": c["name"], "seat": c["account"],
+                        "activity": c.get("activity")} for c in closed[:60]], "closed_total": len(closed)}
 
 
 def decisions(state: str | None) -> dict:
@@ -580,6 +585,9 @@ def _handle(method: str, path: str, query: dict, body: dict, src: "sources.Sourc
             return 200, out
         if head == "capacity":
             return 200, capacity(snap, now)
+        if head == "folders":
+            from . import work
+            return 200, work.folders(snap, q1("seat"))
         if head == "graph" and len(parts) == 1:
             out = graph(snap, now)
             _CACHE[ck] = (now, out)

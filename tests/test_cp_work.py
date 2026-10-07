@@ -172,7 +172,7 @@ def test_spawn_says_when_the_folder_was_not_used(tmp, monkeypatch):
     assert r.calls[0][1]["cwd"] == os.path.expanduser("~")               # still the safe default, never the outside folder
     code, res = work.spawn({"seat": "alpha", "brief": "x", "cwd": "/etc"}, snap, runner=r)
     assert res["queued"] is True and "/etc" in res["note"]
-    assert db.rows("SELECT cwd FROM cp_spawn_queue")[0]["cwd"] is None
+    assert db.rows("SELECT cwd FROM cp_spawn_queue")[0]["cwd"] == os.path.expanduser("~")     # the outside folder is never stored: the default is
     code, res = work.spawn({"seat": "work", "brief": "x", "cwd": str(home / "proj")}, snap, runner=r)
     assert "note" not in res and r.calls[-1][1]["cwd"] == os.path.realpath(home / "proj")
     code, res = work.spawn({"seat": "work", "brief": "x"}, snap, runner=r)

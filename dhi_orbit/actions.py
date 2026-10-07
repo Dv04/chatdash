@@ -18,6 +18,7 @@ Reply routing (measured 2026-09-25 on throwaway sessions, see DHI Orbit README):
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -73,9 +74,25 @@ def _drain_until(pty, ready, max_s: float, settle: float = 0.25) -> bytes:
     return buf
 
 
+# Claude Code draws the same "❯" as the cursor inside its dialogs (`❯ No, exit`), so the glyph alone does not mean the input box is up.
+TRUST_DIALOG_RE = re.compile(r"Security guide|trust this folder|Yes, I trust|Do you trust|No, exit", re.I)
+OTHER_DIALOG_RE = re.compile(r"Enter to (?:confirm|select)|Esc to cancel|Do you want to ", re.I)
+
+
+def _screen_text(buf: bytes) -> str:
+    return _strip_ansi(buf)
+
+
+def _ready_or_dialog(buf: bytes) -> bool:
+    """Stop waiting once the input box is up, or a dialog is (waiting the full timeout on a dialog only delays the answer)."""
+    t = _screen_text(buf)
+    return _input_ready(buf) or bool(TRUST_DIALOG_RE.search(t)) or (_plat.IS_WIN and bool(OTHER_DIALOG_RE.search(t)))
+
+
 def _input_ready(buf: bytes) -> bool:
     if _plat.IS_WIN:       # ConPTY repaints the screen and may not forward the paste-mode switch: the drawn box is the cue
-        return "❯".encode() in buf
+        t = _screen_text(buf)
+        return "❯" in t and not TRUST_DIALOG_RE.search(t) and not OTHER_DIALOG_RE.search(t)
     return b"\x1b[?2004h" in buf and "❯".encode() in buf     # bracketed paste on and the prompt box drawn
 
 
@@ -150,7 +167,15 @@ def type_into_attach(cfg: str, job_id: str, text: str, cwd: str | None,
     pty = _spawn_attach(cfg, job_id, cwd)
     screen = b""
     try:
-        screen = _drain_until(pty, _input_ready, 10 if _plat.IS_WIN else 6)       # ConPTY starts slower
+        screen = _drain_until(pty, _ready_or_dialog, 10 if _plat.IS_WIN else 6)       # ConPTY starts slower
+        shown = _screen_text(screen)
+        if TRUST_DIALOG_RE.search(shown):
+            return {"ok": False, "route": "attach", "error": "This chat's folder is not trusted by Claude Code, so it is waiting on its "
+                    "trust question and nothing was typed. Open `claude` once in that folder, accept the question, then reply again.",
+                    "screen": screen[-400:].decode(errors="replace")}
+        if _plat.IS_WIN and OTHER_DIALOG_RE.search(shown):
+            return {"ok": False, "route": "attach", "error": "This chat is showing a dialog (a question or a permission). Nothing was "
+                    "typed: answer the dialog first, then reply.", "screen": screen[-400:].decode(errors="replace")}
         pty.write(PASTE_START + text.encode() + PASTE_END)
         later: list = []
         later.append(_drain(pty, 0.4))
@@ -424,6 +449,9 @@ def stop(chat: dict) -> dict:
 
 def open_terminal(chat: dict) -> dict:
     """Open a terminal window attached to (or resuming) the chat: macOS Terminal, or a new console window on Windows."""
+    if not chat.get("provider") and chat.get("kind") == "interactive" and chat.get("live") and not chat.get("job_id"):
+        return {"ok": False, "error": "This chat is already open in a terminal. A second window on the same chat would write to it too and "
+                                      "corrupt it. Use that terminal, or type /bg there to move the chat to the background first."}
     cwd = chat.get("cwd") or config.default_cwd()
     if chat.get("provider"):
         named = False

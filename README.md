@@ -48,7 +48,7 @@ installed it with npm, run `claude install` once, because a `.cmd` launcher cann
 open in a terminal cannot be typed into from here (on any system): type `/bg` in that terminal and it becomes a background chat
 you can answer here. Only chats touched in the last 24 hours are listed: start with `dhi-orbit --window-hours 168` for a week.
 Where Claude Code does not keep its `sessions/` folder, running chats are read with `claude agents --json`.
-The Windows port has been tested against a simulated ConPTY only: please report anything odd on a real machine.
+**Windows support is beta in 0.3.8**: it is tested against a simulated ConPTY only, not yet on a real Windows PC. Please report anything odd (Settings > Report a bug or send feedback).
 
 ## Quick start
 
@@ -156,6 +156,14 @@ the Claude Code configuration of each account you want covered:
   evidence gate is on, asks the chat for verification evidence before it ends. At most 3 blocks per turn.
 
 Both fail open: any error, a read-only account, or a non-background session prints nothing and the chat carries on.
+
+## Codex and Cursor chats
+
+If the Codex CLI (`~/.codex`) or the Cursor CLI (`~/.cursor/chats`) is installed, its chats appear in the same lists as your Claude
+Code chats (Board, Sessions, Graph, search, the chat view), labelled Codex or Cursor. Reading is verified against Codex 0.160 and
+Cursor 2026.09. A reply you type reaches the same thread (`codex exec resume`, `cursor-agent --resume`) and runs detached, so a long
+turn does not hold the page; it is refused while a Codex turn is still running. Limit resume, idle compaction, keep-warm and handoff
+only ever drive Claude Code and never act on these chats. Turn a tool off with `"providers_off": ["cursor"]` in `config.json`.
 
 ## How a reply is delivered
 

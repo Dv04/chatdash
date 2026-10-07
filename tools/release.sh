@@ -42,7 +42,8 @@ echo "v$ver is free"
 step "3 build and check the PyPI files"
 uvx --from build pyproject-build >/dev/null 2>&1
 [[ -f dist/dhi_orbit-$ver-py3-none-any.whl && -f dist/dhi_orbit-$ver.tar.gz ]] || fail "build did not produce $ver files"
-unzip -l dist/dhi_orbit-$ver-py3-none-any.whl | grep -q "ui/index.html" || fail "wheel has no UI files"
+listing=$(unzip -l dist/dhi_orbit-$ver-py3-none-any.whl)    # not piped into grep -q: its early exit would SIGPIPE unzip and trip pipefail
+[[ $listing == *"ui/index.html"* && $listing == *"ui/js/app.js"* ]] || fail "wheel has no UI files"
 [[ $(uvx twine check dist/* 2>&1 | grep -c PASSED) == 2 ]] || fail "twine check failed"
 echo "built and checked: $(ls dist | tr '\n' ' ')"
 
@@ -78,7 +79,8 @@ brew fetch --force Dv04/dhi-orbit/dhi-orbit 2>&1 | tail -1
 brew reinstall Dv04/dhi-orbit/dhi-orbit 2>&1 | tail -1
 py=$(brew --prefix dhi-orbit)/libexec/bin/python
 [[ $($py -c "import dhi_orbit; print(dhi_orbit.__version__)") == $ver ]] || fail "brew installed the wrong version"
-$(brew --prefix)/bin/dhi-orbit --help | head -1
+helptext=$($(brew --prefix)/bin/dhi-orbit --help)
+echo "${helptext%%$'\n'*}"
 echo "brew install is $ver"
 
 step "7 PyPI upload (cannot be undone), then read it back"

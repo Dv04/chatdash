@@ -10,30 +10,36 @@ function s(tag, attrs = {}, ...kids) {
   return el;
 }
 
-// Weekly pace: spending the 7-day limit evenly means pct_per_day (default 100/7 = 14.3%)
-// a day. A seat whose remaining share per day until its reset beats that target has spare headroom: use it
-// first. Read from the meter only; a reading taken before its own 7d reset is unknown, never guessed.
+// Weekly pace : the 7-day limit unlocks in blocks of BLOCK_H hours, each worth perDay*BLOCK_H/24 %
+// (15% a day = 5% per 8 h). The first block is open the moment the window starts, so a fresh seat shows 5% to use now,
+// 20% one day in, and so on, capped at 100%. "Available" = unlocked so far minus what the meter says is used; it is
+// negative when a seat is ahead of the unlocks. Read from the meter only; a reading taken before its own 7d reset is
+// unknown, never guessed.
+export const BLOCK_H = 8;
+export const USE_MIN = 10;   // points available before a seat is worth steering work to; under that (either way) it is on pace
 export function pace(x, now, perDay) {
   const w = x.seven_day || {};
   if (w.pct == null || !w.resets_at) return { state: "unknown", why: "no 7-day reading" };
   if (w.resets_at < now) return { state: "unknown", why: "the 7-day window reset since the last reading" };
-  const daysLeft = Math.max((w.resets_at - now) / 86400, 0.04), elapsed = Math.min(7, Math.max(0, 7 - daysLeft));
-  const expected = Math.min(100, perDay * elapsed), left = Math.max(0, 100 - w.pct);
-  const perDayLeft = left / daysLeft, extra = left - perDay * daysLeft;
-  const state = w.pct >= 100 ? "spent" : perDayLeft > perDay * 1.15 ? "use" : perDayLeft < perDay * 0.85 ? "slow" : "on";
-  return { state, expected, used: w.pct, left, daysLeft, perDayLeft, extra };
+  const step = perDay * BLOCK_H / 24, blockS = BLOCK_H * 3600;
+  const daysLeft = Math.max((w.resets_at - now) / 86400, 0.04), elapsedS = Math.min(7 * 86400, Math.max(0, 7 * 86400 - (w.resets_at - now)));
+  const blocks = Math.floor(elapsedS / blockS) + 1;
+  const expected = Math.min(100, step * blocks), left = Math.max(0, 100 - w.pct);
+  const extra = expected - w.pct, nextIn = blockS - (elapsedS % blockS);
+  const nextAt = expected < 100 && w.resets_at - now > nextIn ? now + nextIn : null;
+  const perDayLeft = left / daysLeft;
+  const state = w.pct >= 100 ? "spent" : extra >= USE_MIN ? "use" : extra <= -USE_MIN ? "slow" : "on";
+  return { state, expected, used: w.pct, left, daysLeft, perDayLeft, extra, step, nextAt };
 }
 function paceLine(p, perDay, x) {
   if (p.state === "unknown") return h("div", { class: "pace unknown" }, h("span", { class: "pace-tag" }, "Pace unknown"), ` ${p.why}`);
-  const short = p.daysLeft < 1;
-  const rate = short ? `${Math.round(p.left)}% left, resets in ${Math.max(1, Math.round(p.daysLeft * 24))} h`
-    : `${Math.round(p.perDayLeft)}% a day for ${p.daysLeft.toFixed(1)} days`;
   const tag = { spent: "Used up", use: "Use first", slow: "Ahead of pace", on: "On pace" }[p.state];
-  const detail = p.state === "spent" ? "" : p.state === "use" ? `${Math.round(p.extra)}% spare, ${rate}` : rate;
+  const nxt = p.nextAt ? `, +${+p.step.toFixed(1)}% at ${ct(p.nextAt)}` : "";
+  const detail = p.state === "spent" ? "" : p.extra >= 0 ? `${Math.round(p.extra)}% available now${nxt}` : `${Math.round(-p.extra)}% over what is unlocked${nxt}`;
   const five = (x.five_hour || {}).pct;
   const fiveFull = five != null && five >= 100 && p.state !== "spent";
-  // One status word in colour, the numbers in plain ink; the even-pace arithmetic lives in the tooltip.
-  return h("div", { class: "pace " + p.state, title: `Target ${perDay}% a day. By now an even pace would have used about ${Math.round(p.expected)}%; used ${Math.round(p.used)}%.` },
+  // One status word in colour, the numbers in plain ink; the unlock arithmetic lives in the tooltip.
+  return h("div", { class: "pace " + p.state, title: `${+p.step.toFixed(1)}% unlocks every ${BLOCK_H} h (${perDay}% a day). ${Math.round(p.expected)}% is unlocked so far; used ${Math.round(p.used)}%.` },
     h("span", { class: "pace-tag" }, tag), detail && ` ${detail}`,
     fiveFull && h("span", { class: "chip pace-5h" }, `5h full${x.resume_at ? ` until ${ct(x.resume_at)}` : ""}`));
 }
@@ -47,7 +53,7 @@ function bar(w, label, now, mark) {
     h("span", { class: "gauge wide " + cls, role: "meter", "aria-valuemin": "0", "aria-valuemax": "100",
       "aria-valuenow": known ? String(Math.round(w.pct)) : null, "aria-label": `${label} used`,
       title: reset }, known && h("i", { style: `width:${Math.min(100, w.pct)}%` }),
-      mark != null && h("b", { class: "pace-mark", style: `left:${Math.min(100, mark)}%`, title: `even pace: about ${Math.round(mark)}% by now` })),
+      mark != null && h("b", { class: "pace-mark", style: `left:${Math.min(100, mark)}%`, title: `unlocked so far: ${Math.round(mark)}%` })),
     h("span", { class: "cap-v" }, known ? `${Math.round(w.pct)}%` : "?"),
     h("span", { class: "cap-r" }, reset));
 }
@@ -64,16 +70,16 @@ export function renderCapacity(el, ov, ui) {
   const now = Date.now() / 1000;
   // Nearest 7-day reset first: spend from the seats whose week ends soonest.
   const seats = ov && ov.capacity ? [...ov.capacity.seats].sort((a, b) => next7d(a, now) - next7d(b, now) || a.seat.localeCompare(b.seat)) : null;
-  const perDay = (ui.pace && ui.pace.pct_per_day) || 14.3;
+  const perDay = (ui.pace && ui.pace.pct_per_day) || 15;
   const paces = new Map((seats || []).map((x) => [x.seat, pace(x, now, perDay)]));
   const useFirst = (seats || []).filter((x) => !x.excluded && paces.get(x.seat).state === "use").sort((a, b) => paces.get(b.seat).extra - paces.get(a.seat).extra);
   const head = h("div", { class: "section-head" }, h("h2", {}, "Capacity"),
     h("span", { class: "meta" }, seats ? [`soonest 7-day reset first`, ...[["blocked", "blocked"], ["unknown", "no reading"]].map(([st, w]) => { const k = seats.filter((x) => x.state === st).length; return k ? `${k} ${w}` : ""; })].filter(Boolean).join(", ") : ""));
   if (!seats) { el.replaceChildren(head, h("div", { class: "skeleton" })); return; }
   const advice = h("p", { class: "pace-advice" }, useFirst.length
-    ? ["Use first (behind the ", perDay, "% a day pace): ", useFirst.map((x, i) => [i ? ", " : "", h("b", {}, x.seat), ` +${Math.round(paces.get(x.seat).extra)}%`,
+    ? ["Use first (", +(perDay * BLOCK_H / 24).toFixed(1), "% unlocks every ", BLOCK_H, " h): ", useFirst.map((x, i) => [i ? ", " : "", h("b", {}, x.seat), ` +${Math.round(paces.get(x.seat).extra)}%`,
         (x.five_hour || {}).pct >= 100 ? ` (5h full${x.resume_at ? ` until ${ct(x.resume_at)}` : ""})` : ""])]
-    : `No seat is behind the ${perDay}% a day pace.`);
+    : `No seat has unlocked headroom (${+(perDay * BLOCK_H / 24).toFixed(1)}% unlocks every ${BLOCK_H} h).`);
   const rows = seats.map((x) => h("div", { class: "cap-seat " + x.state },
     arcGauge(x),
     h("div", { class: "cap-name" }, h("span", { class: "dot", "aria-hidden": "true" }), h("strong", {}, x.seat),

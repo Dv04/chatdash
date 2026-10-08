@@ -2,20 +2,32 @@
 
 # DHI Orbit
 
-A local web dashboard that shows every Claude Code chat across one or more config directories on one page.
+One local board for every coding-agent chat on your machine: Claude Code, Codex, Cursor, Gemini CLI and Antigravity, and any other terminal agent you describe in a small `agents.json`.
 
 - A board of what needs you: questions, permission prompts, blocked jobs, and chats stalled on a usage limit.
-- Reply to a chat from the page (one normal turn in that chat), stop it, or open it in Terminal.
-- Usage limits per account (5-hour and 7-day), set up when you connect the account; never a guess.
+- Every agent's chats in the same lists, labelled with the tool's name (see [Other agents on the same board](#other-agents-on-the-same-board)).
+- Reply to a chat from the page (one normal turn in that chat), stop it, or open it in Terminal. Background chats take replies too.
+- Usage limits (5-hour and 7-day) per Claude Code account, and for Codex; set up when you connect the account, never a guess.
 - A graph of accounts, chats, work items and the files they touch.
-- Optional WebGL "nebula" look (Settings, Look). The default look is plain and needs no GPU.
-- Standard library only: no dependencies, no build step, no CDN.
+- Optional WebGL "nebula" look (Settings, Look). The default look is plain and needs no GPU. Settings > Quality scales it for weaker machines.
+- Standard library only: no dependencies, no build step, no CDN. Runs on macOS, Linux and Windows (beta).
 
 Viewing costs zero model tokens: DHI Orbit only reads files. A reply you send is one normal turn in that chat.
 
 ## Screenshots
 
-Screenshots are not included yet (placeholder).
+Synthetic demo data (no real chats): the board with one question and the per-account limits, the graph, the optional nebula look, the light theme, and the phone layout.
+
+![The board: what needs you, with each account's 5-hour and 7-day limits](https://raw.githubusercontent.com/Dv04/dhi-orbit/main/docs/screenshots/board.png)
+
+![The graph of accounts, chats and work items](https://raw.githubusercontent.com/Dv04/dhi-orbit/main/docs/screenshots/graph.png)
+
+![The optional nebula look](https://raw.githubusercontent.com/Dv04/dhi-orbit/main/docs/screenshots/nebula-board.jpg)
+
+<p>
+<img src="https://raw.githubusercontent.com/Dv04/dhi-orbit/main/docs/screenshots/board-light.png" alt="Light theme" width="62%">
+<img src="https://raw.githubusercontent.com/Dv04/dhi-orbit/main/docs/screenshots/phone-board.png" alt="Phone layout" width="30%">
+</p>
 
 ## Install
 
@@ -39,7 +51,7 @@ pip, in any virtualenv:
 python3 -m pip install dhi-orbit
 ```
 
-You also need Claude Code itself (`claude` on your `PATH`).
+You also need at least one of the agents it reads: Claude Code itself (`claude` on your `PATH`) for the Claude Code features, or Codex, Cursor, Gemini CLI or Antigravity (see [Other agents on the same board](#other-agents-on-the-same-board)).
 
 Windows: `pipx install dhi-orbit` (or pip) pulls in `pywinpty` (ConPTY, used to type into `claude attach` and to run
 sign-in) and `tzdata` by itself. Use Windows 10 version 1809 or newer for ConPTY. Git for Windows is not needed. The board,
@@ -50,7 +62,7 @@ installed it with npm, run `claude install` once, because a `.cmd` launcher cann
 open in a terminal cannot be typed into from here (on any system): type `/bg` in that terminal and it becomes a background chat
 you can answer here. Only chats touched in the last 24 hours are listed: start with `dhi-orbit --window-hours 168` for a week.
 Where Claude Code does not keep its `sessions/` folder, running chats are read with `claude agents --json`.
-**Windows support is beta in 0.3.11**: it passes its 14 end-to-end checks and the full test suite on a Windows 11 ARM64 virtual machine (real ConPTY, real `claude.exe`, with and without Git for Windows), but has not been run on every kind of PC yet. Please report anything odd (Settings > Report a bug or send feedback).
+**Windows support is beta**: as of 0.3.11 it passed its 14 end-to-end checks and the full test suite on a Windows 11 ARM64 virtual machine (real ConPTY, real `claude.exe`, with and without Git for Windows), but has not been run on every kind of PC yet. Please report anything odd (Settings > Report a bug or send feedback).
 
 ## Quick start
 
@@ -342,6 +354,12 @@ checks. `docs/DESIGN.md` records the visual design.
 Settings > Report a bug or send feedback opens a new issue on <https://github.com/Dv04/dhi-orbit/issues> with your text filled in
 (Bug or Feedback, optionally with the DHI Orbit version and browser). Nothing is sent from the dashboard: you review the issue on
 GitHub and submit it yourself.
+
+## Support and questions
+
+Questions and ideas: [GitHub Discussions](https://github.com/Dv04/dhi-orbit/discussions). Bugs: [Issues](https://github.com/Dv04/dhi-orbit/issues).
+
+DHI Orbit is free and stays free (MIT). If it saves you time, you can support its maintenance through [GitHub Sponsors](https://github.com/sponsors/Dv04), [PayPal](https://www.paypal.com/paypalme/DevSanghvi48) or [Venmo](https://account.venmo.com/u/Dev-Sanghvi-1). Sponsorship is voluntary and does not buy paid access or services.
 
 ## About
 

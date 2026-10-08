@@ -355,6 +355,12 @@ Settings > Report a bug or send feedback opens a new issue on <https://github.co
 (Bug or Feedback, optionally with the DHI Orbit version and browser). Nothing is sent from the dashboard: you review the issue on
 GitHub and submit it yourself.
 
+## Support and questions
+
+Questions and ideas: [GitHub Discussions](https://github.com/Dv04/dhi-orbit/discussions). Bugs: [Issues](https://github.com/Dv04/dhi-orbit/issues).
+
+DHI Orbit is free and stays free (MIT). If it saves you time, you can support its maintenance through [GitHub Sponsors](https://github.com/sponsors/Dv04), [PayPal](https://www.paypal.com/paypalme/DevSanghvi48) or [Venmo](https://account.venmo.com/u/Dev-Sanghvi-1). Sponsorship is voluntary and does not buy paid access or services.
+
 ## About
 
 Built by Dev Sanghvi at DHI (https://dhi-tech.com).

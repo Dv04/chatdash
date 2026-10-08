@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Builds the static site for orbit.dhi-tech.com into site/ (landing page plus the README as the docs page).
+"""Builds the static site into site/ (landing page plus the README as the docs page). The site address comes from site-src/site.json.
 
     python3 tools/build_site.py        needs the `markdown` package at build time only; the site itself is plain HTML.
 """
-import re, shutil, pathlib, markdown
+import json, re, shutil, pathlib, markdown
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC, OUT = ROOT / "site-src", ROOT / "site"
 VERSION = re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(), re.M).group(1)
 GH = "https://github.com/Dv04/dhi-orbit"
+SITE = json.loads((SRC / "site.json").read_text())["url"]
 
 if OUT.exists():
     shutil.rmtree(OUT)
@@ -25,7 +26,7 @@ for n in ("github", "paypal", "venmo"):
 HEAD = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title}</title><meta name="description" content="{desc}">
 <link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css">
-<meta property="og:title" content="{title}"><meta property="og:description" content="{desc}"><meta property="og:image" content="https://orbit.dhi-tech.com/img/board.png"><meta property="og:type" content="website">
+<meta property="og:title" content="{title}"><meta property="og:description" content="{desc}"><meta property="og:image" content="{site}/img/board.png"><meta property="og:type" content="website">
 </head><body>"""
 NAV = f"""<div class="support"><div class="wrap"><span>DHI Orbit is free and open source. Support its development:</span>
 <a href="https://github.com/sponsors/Dv04"><img src="/img/sponsor-github.svg" alt="GitHub Sponsors" height="30"></a><a href="https://www.paypal.com/paypalme/DevSanghvi48"><img src="/img/sponsor-paypal.svg" alt="PayPal" height="30"></a><a href="https://account.venmo.com/u/Dev-Sanghvi-1"><img src="/img/sponsor-venmo.svg" alt="Venmo" height="30"></a></div></div>
@@ -34,7 +35,7 @@ NAV = f"""<div class="support"><div class="wrap"><span>DHI Orbit is free and ope
 FOOT = f"""<footer><div class="wrap"><div class="row"><div>DHI Orbit {VERSION}, MIT licence. Built by Dev Sanghvi at <a href="https://dhi-tech.com">DHI</a>.</div>
 <div><a href="{GH}">GitHub</a> · <a href="https://pypi.org/project/dhi-orbit/">PyPI</a> · <a href="{GH}/discussions">Discussions</a> · <a href="{GH}/issues">Issues</a> · <a href="https://github.com/sponsors/Dv04">Sponsor</a></div></div></div></footer>"""
 
-INDEX = HEAD.format(title="DHI Orbit: one local board for every coding-agent chat",
+INDEX = HEAD.format(site=SITE, title="DHI Orbit: one local board for every coding-agent chat",
     desc="A local, open-source dashboard for Claude Code, Codex, Cursor, Gemini CLI and Antigravity chats: what needs you, what is working, your limits, and a reply box.") + NAV + f"""
 <header class="hero"><div class="wrap">
 <h1>One board for every coding-agent chat</h1>
@@ -79,7 +80,7 @@ md = (ROOT / "README.md").read_text()
 md = re.sub(r'^<p align="center">.*?</p>\n', "", md, count=1, flags=re.S)
 md = md.replace("https://raw.githubusercontent.com/Dv04/dhi-orbit/main/docs/screenshots/", "/img/")
 body = markdown.markdown(md, extensions=["fenced_code", "tables", "toc"])
-DOCS = HEAD.format(title="DHI Orbit documentation", desc="Install, connect accounts, usage limits, other agents, phone access and the security model for DHI Orbit.") + NAV + '<main class="doc">' + body + "</main>" + FOOT + "</body></html>"
+DOCS = HEAD.format(site=SITE, title="DHI Orbit documentation", desc="Install, connect accounts, usage limits, other agents, phone access and the security model for DHI Orbit.") + NAV + '<main class="doc">' + body + "</main>" + FOOT + "</body></html>"
 (OUT / "docs" / "index.html").write_text(DOCS)
 (OUT / "_headers").write_text("/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n")
 print("built", VERSION, sorted(p.name for p in OUT.rglob("*") if p.is_file()))

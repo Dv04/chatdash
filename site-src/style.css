@@ -33,3 +33,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;color:var(--mute);fo
 .doc{max-width:820px;margin:0 auto;padding:10px 20px 80px}.doc h1{font-size:34px;max-width:none;margin:10px 0 18px}.doc h2{font-size:26px;margin:44px 0 12px;padding-top:6px;border-top:1px solid var(--line)}.doc h3{font-size:20px;margin:30px 0 8px}
 .doc table{border-collapse:collapse;width:100%;font-size:15px;margin:14px 0;display:block;overflow:auto}.doc th,.doc td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}.doc th{background:var(--bg2)}
 .doc img{max-width:100%;height:auto;border-radius:10px;border:1px solid var(--line)}.doc li{margin:4px 0}
+.support{background:linear-gradient(90deg,rgba(122,168,255,.18),rgba(183,156,255,.18));border-bottom:1px solid var(--line);font-size:14.5px}
+.support .wrap{display:flex;gap:10px 16px;align-items:center;justify-content:center;flex-wrap:wrap;padding-top:9px;padding-bottom:9px}
+.support span{color:var(--fg)}.support a{display:inline-flex;line-height:0}.support a img{display:block;height:30px;width:auto}.support a:hover{filter:brightness(1.12)}
+nav .links a.sp{color:#fff;background:linear-gradient(135deg,var(--acc),var(--acc2));padding:5px 14px;border-radius:8px;font-weight:600}
+.btn.sp{border-color:var(--acc2)}
+@media(max-width:560px){nav .links a:nth-child(1),nav .links a:nth-child(4){display:none}nav .links a.sp{padding:5px 11px}}

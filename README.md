@@ -1,5 +1,8 @@
 <p align="center"><img src="https://raw.githubusercontent.com/Dv04/dhi-orbit/main/docs/brand/orbit-lockup-dark.png" alt="DHI Orbit" width="480"></p>
 
+<p align="center"><b>DHI Orbit is free and open source. If it saves you time, please support its development:</b><br>
+<a href="https://github.com/sponsors/Dv04"><img src="https://raw.githubusercontent.com/Dv04/dhi-orbit/main/docs/brand/sponsor-github.svg" alt="Sponsor on GitHub" height="40"></a> <a href="https://www.paypal.com/paypalme/DevSanghvi48"><img src="https://raw.githubusercontent.com/Dv04/dhi-orbit/main/docs/brand/sponsor-paypal.svg" alt="PayPal" height="40"></a> <a href="https://account.venmo.com/u/Dev-Sanghvi-1"><img src="https://raw.githubusercontent.com/Dv04/dhi-orbit/main/docs/brand/sponsor-venmo.svg" alt="Venmo" height="40"></a></p>
+
 # DHI Orbit
 
 One local board for every coding-agent chat on your machine: Claude Code, Codex, Cursor, Gemini CLI and Antigravity, and any other terminal agent you describe in a small `agents.json`.
@@ -359,7 +362,7 @@ GitHub and submit it yourself.
 
 Questions and ideas: [GitHub Discussions](https://github.com/Dv04/dhi-orbit/discussions). Bugs: [Issues](https://github.com/Dv04/dhi-orbit/issues).
 
-DHI Orbit is free and stays free (MIT). If it saves you time, you can support its maintenance through [GitHub Sponsors](https://github.com/sponsors/Dv04), [PayPal](https://www.paypal.com/paypalme/DevSanghvi48) or [Venmo](https://account.venmo.com/u/Dev-Sanghvi-1). Sponsorship is voluntary and does not buy paid access or services.
+DHI Orbit is free and stays free (MIT). You can support its maintenance through [GitHub Sponsors](https://github.com/sponsors/Dv04), [PayPal](https://www.paypal.com/paypalme/DevSanghvi48) or [Venmo](https://account.venmo.com/u/Dev-Sanghvi-1).
 
 ## About
 

@@ -19,14 +19,18 @@ for f in (ROOT / "docs" / "screenshots").iterdir():
 shutil.copy(ROOT / "docs/brand/orbit-app-icon.svg", OUT / "icon.svg")
 shutil.copy(ROOT / "docs/brand/orbit-lockup-dark.png", OUT / "img" / "lockup-dark.png")
 shutil.copy(SRC / "style.css", OUT / "style.css")
+for n in ("github", "paypal", "venmo"):
+    shutil.copy(ROOT / "docs/brand" / f"sponsor-{n}.svg", OUT / "img" / f"sponsor-{n}.svg")
 
 HEAD = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title}</title><meta name="description" content="{desc}">
 <link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css">
 <meta property="og:title" content="{title}"><meta property="og:description" content="{desc}"><meta property="og:image" content="https://orbit.dhi-tech.com/img/board.png"><meta property="og:type" content="website">
 </head><body>"""
-NAV = f"""<div class="wrap"><nav><a class="brand" href="/"><img src="/icon.svg" alt="">DHI Orbit</a>
-<div class="links"><a href="/#install">Install</a><a href="/docs/">Docs</a><a href="{GH}">GitHub</a><a href="{GH}/discussions">Discussions</a></div></nav></div>"""
+NAV = f"""<div class="support"><div class="wrap"><span>DHI Orbit is free and open source. Support its development:</span>
+<a href="https://github.com/sponsors/Dv04"><img src="/img/sponsor-github.svg" alt="GitHub Sponsors" height="30"></a><a href="https://www.paypal.com/paypalme/DevSanghvi48"><img src="/img/sponsor-paypal.svg" alt="PayPal" height="30"></a><a href="https://account.venmo.com/u/Dev-Sanghvi-1"><img src="/img/sponsor-venmo.svg" alt="Venmo" height="30"></a></div></div>
+<div class="wrap"><nav><a class="brand" href="/"><img src="/icon.svg" alt="">DHI Orbit</a>
+<div class="links"><a href="/#install">Install</a><a href="/docs/">Docs</a><a href="{GH}">GitHub</a><a href="{GH}/discussions">Discussions</a><a class="sp" href="https://github.com/sponsors/Dv04">Sponsor</a></div></nav></div>"""
 FOOT = f"""<footer><div class="wrap"><div class="row"><div>DHI Orbit {VERSION}, MIT licence. Built by Dev Sanghvi at <a href="https://dhi-tech.com">DHI</a>.</div>
 <div><a href="{GH}">GitHub</a> · <a href="https://pypi.org/project/dhi-orbit/">PyPI</a> · <a href="{GH}/discussions">Discussions</a> · <a href="{GH}/issues">Issues</a> · <a href="https://github.com/sponsors/Dv04">Sponsor</a></div></div></div></footer>"""
 
@@ -35,7 +39,7 @@ INDEX = HEAD.format(title="DHI Orbit: one local board for every coding-agent cha
 <header class="hero"><div class="wrap">
 <h1>One board for every coding-agent chat</h1>
 <p class="sub">See which chat is waiting on you, what is working, and each account's 5-hour and 7-day limits. Reply from the page. It runs on your own computer, costs zero model tokens to look at, and is open source.</p>
-<div class="cta"><a class="btn p" href="#install">Install</a><a class="btn" href="/docs/">Read the docs</a><a class="btn" href="{GH}">View on GitHub</a></div>
+<div class="cta"><a class="btn p" href="#install">Install</a><a class="btn" href="/docs/">Read the docs</a><a class="btn" href="{GH}">View on GitHub</a><a class="btn sp" href="https://github.com/sponsors/Dv04">Sponsor</a></div>
 <div class="inst" id="install"><div class="tabs" role="tablist">
 <button role="tab" aria-selected="true" data-t="brew">Homebrew</button><button role="tab" aria-selected="false" data-t="pipx">pipx</button><button role="tab" aria-selected="false" data-t="pip">pip</button></div>
 <pre data-p="brew"><code>brew install Dv04/dhi-orbit/dhi-orbit

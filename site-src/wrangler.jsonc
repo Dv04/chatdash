@@ -1,0 +1,7 @@
+{
+  // orbit.dhi-tech.com: static site built by tools/build_site.py into ../site. A separate Worker from the dhi-tech.com marketing site.
+  "name": "dhi-orbit-site",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "../site", "html_handling": "auto-trailing-slash", "not_found_handling": "404-page" },
+  "routes": [{ "pattern": "orbit.dhi-tech.com", "custom_domain": true }]
+}

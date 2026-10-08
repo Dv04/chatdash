@@ -43,3 +43,6 @@ tools/acceptance/s[0-9]*/
 !docs/screenshots/*.png
 !docs/screenshots/*.jpg
 !dhi_orbit/ui/icon-*.png
+
+# built website (python3 tools/build_site.py); deployed with wrangler, not committed
+site/

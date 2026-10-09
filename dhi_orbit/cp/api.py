@@ -309,6 +309,7 @@ def graph(snap: dict, now: float) -> dict:
                       "parent": f"work_item:{wi}" if wi else None, "needs_you": c["session_id"] in ny,
                       "repo": _repo(c),
                       "limited": bool(c.get("banner")), "kind": c["kind"], "final": (c.get("final") or "")[-280:],
+                      "bg_shell": bool(c.get("bg_shell")),
                       "activity": c.get("activity")})
         edges.append({"from": sid, "to": f"seat:{c['account']}", "kind": "runs_on"})
         if wi:
@@ -525,7 +526,7 @@ def _session_row(c: dict, now: float, prefs: dict | None = None) -> dict:
                                                                   "only background chats with a job can be typed into")},"key": c["key"], "session_id": c["session_id"], "seat": c["account"], "name": c["name"],
             "state": c["state"], "live": bool(c.get("live")), "kind": c["kind"], "work_item": c.get("ws"),
             "activity": c.get("activity"), "warmth": c.get("warmth"), "cache_age_min": c.get("cache_age_min"),
-            "kw": c.get("kw"), "excluded": c["excluded"], "job_id": c.get("job_id"),
+            "kw": c.get("kw"), "excluded": c["excluded"], "job_id": c.get("job_id"), "bg_shell": bool(c.get("bg_shell")),
             "limited": bool(c.get("banner")), "final": (c.get("final") or "")[-300:], "final_at": c.get("final_at"),
             "units_today": c.get("units_today"), "provider": c.get("provider"), "provider_label": c.get("provider_label")}
 

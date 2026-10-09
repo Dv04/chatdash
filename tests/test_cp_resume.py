@@ -182,6 +182,7 @@ def test_idle_decide():
     assert d(ichat(), seat=dict(ISEAT, five_hour={"pct": 100}))[0] == "cold"
     assert d(ichat(state="needs_you"))[0] == "skip"                       # never type into a dialog
     assert d(ichat(job_id=None))[0] == "skip"
+    assert d(ichat(bg_shell=True))[0] == "skip"                          # idle prompt, but a background shell still runs
     assert d(ichat(), row={"basis": "2026-10-03T00:00:00Z", "status": "compacted"})[0] == "skip"
     assert d(ichat(last_prompt_at="2026-10-03T05:00:00Z"), row={"basis": "2026-10-03T00:00:00Z", "status": "compacted"})[0] == "compact"
 
@@ -317,3 +318,18 @@ def test_idle_unanswered_ping_goes_cold_after_two_minutes(tmp, tmp_path):
     c = ichat(path=_ka_transcript(tmp_path), cache_age_min=56.0)
     assert r.tick({"chats": [c], "seats": [ISEAT]}, t_ping + 60) == []
     assert [o["action"] for o in r.tick({"chats": [c], "seats": [ISEAT]}, t_ping + 130)] == ["would cold"]
+
+
+def test_shell_status_is_idle_with_bg_shell(tmp_path):
+    # Claude Code writes status "shell" when its prompt is idle and a background Bash task still runs: the chat
+    # takes replies, so it must not read as working (a working chat's replies are held in the send queue).
+    from dhi_orbit import collector
+    from dhi_orbit.extract import Transcript
+    p = tmp_path / "s1.jsonl"
+    p.write_text("")
+    t = Transcript(str(p))
+    t.update()
+    col = collector.Collector()
+    for status, state, shell in (("shell", "idle", True), ("busy", "working", False), ("idle", "idle", False)):
+        row = col._row(str(tmp_path), "a", "s1", str(p), t, {"status": status, "kind": "bg"}, None, "2026-10-09")
+        assert (row["state"], row["bg_shell"]) == (state, shell), status

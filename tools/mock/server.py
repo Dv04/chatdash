@@ -147,6 +147,7 @@ def graph(now):
         nodes.append({"id": sid, "type": "session", "label": f"SYNTHETIC chat {i} ({wi})", "state": st, "seat": SEATS[i % 7],
                       "spend": rnd.randint(0, 900), "parent": f"work_item:{wi}", "needs_you": st == "needs_you",
                       "limited": i == 3, "kind": "bg", "final": "SYNTHETIC final message for this chat.",
+                      "bg_shell": st == "idle" and i % 4 == 0,      # idle prompt with a background shell still running
                       "activity": now - rnd.randint(0, 20000)})
         edges += [{"from": sid, "to": f"seat:{SEATS[i % 7]}", "kind": "runs_on"},
                   {"from": sid, "to": f"work_item:{wi}", "kind": "belongs_to"}]
@@ -204,6 +205,9 @@ class H(BaseHTTPRequestHandler):
         body = {}
         if method != "GET":
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        if method == "GET" and path.startswith("proposals/") and path.rsplit("/", 1)[-1].isdigit():
+            return self._send(200, {"id": int(path.rsplit("/", 1)[-1]), "why": "SYNTHETIC reason", "detail": "SYNTHETIC detail",
+                                    "diff": "--- a/state.md\n+++ b/state.md\n@@ -1 +1 @@\n-old line\n+new line\n"})
         if method == "GET" and path == "overview":
             return self._send(200, overview(now))
         if method == "GET" and path == "workitems":

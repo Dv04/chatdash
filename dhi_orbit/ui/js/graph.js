@@ -935,7 +935,7 @@ export class Graph {
     const known = (sids || []).map((sid) => by.get(sid)).filter(Boolean), atLimit = seatsAtLimit(null, this.data);
     const other = (sids || []).length - known.length;
     return h("div", { class: "g-sl" }, h("div", { class: "hint" }, `Touched by ${(sids || []).length} chat${(sids || []).length === 1 ? "" : "s"}`),
-      h("ul", { class: "sess" }, known.map((x) => h("li", {}, h("span", { class: "st " + (limitWord(x, atLimit) ? "limited" : x.needs_you ? "needs_you" : x.state), "aria-hidden": "true" }),
+      h("ul", { class: "sess" }, known.map((x) => h("li", {}, h("span", { class: "st " + (limitWord(x, atLimit) ? "limited" : x.needs_you ? "needs_you" : x.state + (x.state === "idle" && x.bg_shell ? " bg" : "")), "aria-hidden": "true" }),
         h("a", { class: "nm", href: "#/chat/" + encodeURIComponent(x.session_id) }, x.label), h("span", { class: "rt" }, x.seat)))),
       other > 0 && h("p", { class: "hint" }, `${other} older chat${other === 1 ? "" : "s"} not in view`));
   }

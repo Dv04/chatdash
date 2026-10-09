@@ -377,6 +377,10 @@ export function renderSide(el, graph, ui, opts = {}) {
   const filt = el._filt || (el._filt = h("input", { type: "search", class: "free side-filter", placeholder: "Filter chats (press / in the list)",
     "aria-label": "Filter chats", oninput: () => el._graph && renderSide(el, el._graph, ui, el._opts) }));
   const hadFocus = el.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.sid : null;
+  // A fold button ("N idle", "N closed, show") that was just clicked: the rebuild removes it, so focus goes to the first row it
+  // revealed. The list's own scroll offset (and the page's) is put back after the rebuild, so opening a fold never jumps to the top.
+  const foldKey = el.contains(document.activeElement) && document.activeElement.classList.contains("idle-fold") ? document.activeElement.dataset.key : null;
+  const keepY = el.scrollTop, keepWin = window.scrollY;
   el._graph = graph; el._opts = opts;
   if (!el._kb) { el._kb = true; el.addEventListener("keydown", (e) => listKeys(e, el, ui)); }
   const q = filt.value.trim().toLowerCase();
@@ -401,40 +405,53 @@ export function renderSide(el, graph, ui, opts = {}) {
   const blocks = order.map(([key, list]) => {
     const title = mode === "recent" ? "Most recent" : mode === "seat" ? key : key === "none" ? "No work item" : (labels[key] || key).replace(/^([A-Za-z][A-Za-z0-9]*-\d+)\s.*/, "$1") + " " +
       ((labels[key] || "").replace(/^[A-Za-z][A-Za-z0-9]*-\d+\s*/, "").split(" - ")[0]);
-    const shown = mode === "recent" ? list : list.filter((s) => s.state !== "idle" || now - idleSeen.get(s.id) < IDLE_FOLD_SEC * 1000 || ui.expanded.has(key) || ready.has(sidOf(s)) || sidOf(s) === opts.cur);
+    const shown = mode === "recent" ? list : list.filter((s) => s.state !== "idle" || s.bg_shell || now - idleSeen.get(s.id) < IDLE_FOLD_SEC * 1000 || ui.expanded.has(key) || ready.has(sidOf(s)) || sidOf(s) === opts.cur);
     const folded = list.length - shown.length;
-    return h("section", { class: "group" },
+    const sec = h("section", { class: "group" },
       h("h3", {}, title, h("span", { class: "n" }, `${list.length}`)),
       h("ul", { class: "sess" }, (mode === "recent" ? shown : shown.sort(byState)).map((s) => {
         const sid = sidOf(s), isReady = s.state === "idle" && !s.limited && ready.has(sid);
         const lw = limitWord(s, atLimit);   // same rule as the header (splitNeeds parks those items), whatever the chat's own state says
-        const cls = lw ? "limited" : s.needs_you ? "needs_you" : isReady ? "ready" : s.state;
-        const word = lw || (s.needs_you ? "needs you" : isReady ? "answer ready" : s.state);
+        const shell = s.state === "idle" && s.bg_shell;   // idle prompt, a background shell still runs: replies go straight in
+        const cls = (lw ? "limited" : s.needs_you ? "needs_you" : isReady ? "ready" : s.state) + (shell && !lw ? " bg" : "");
+        const word = (lw || (s.needs_you ? "needs you" : isReady ? "answer ready" : s.state)) + (shell && !lw ? ", shell running" : "");
         return h("li", { title: s.final || "" },
           h("span", { class: "st " + cls, "aria-hidden": "true", title: word }),
           h("a", { class: "nm", href: "#/chat/" + encodeURIComponent(sid), dataset: { sid }, "aria-current": sid === opts.cur ? "true" : "false" }, s.label, h("span", { class: "sr" }, ", ", word)),
           h("span", { class: "rt" }, mode === "recent" ? `${s.seat}${s.activity ? ", " + age(Date.now() / 1000 - s.activity) : ""}` : mode === "seat" ? (s.parent || "").replace("work_item:", "") : s.seat));
       })),
-      folded > 0 && h("button", { class: "idle-fold", onclick: () => ui.expand(key) }, `${folded} idle`));
+      folded > 0 && h("button", { class: "idle-fold", dataset: { key: String(key) }, onclick: (e) => { e.currentTarget.focus({ preventScroll: true }); ui.expand(key); } }, `${folded} idle`));
+    sec._key = String(key);
+    return sec;
   });
   // Chats with no process and no job: not on the graph, but never invisible. Folded under their count; one click lists them.
   const closed = (graph.closed || []).filter((c) => !q || `${c.label} ${c.seat}`.toLowerCase().includes(q));
   if (closed.length) {
     const open = ui.expanded.has("closed") || (q && closed.length);
     const total = Math.max(graph.closed_total || 0, closed.length);
-    blocks.push(h("section", { class: "group" },
+    const csec = h("section", { class: "group" },
       h("h3", {}, "Closed", h("span", { class: "n" }, `${total}`)),
       open ? h("ul", { class: "sess" }, closed.map((c) => h("li", {},
         h("span", { class: "st stopped", "aria-hidden": "true", title: "closed" }),
         h("a", { class: "nm", href: "#/chat/" + encodeURIComponent(c.session_id), dataset: { sid: c.session_id },
           "aria-current": c.session_id === opts.cur ? "true" : "false" }, c.label, h("span", { class: "sr" }, ", closed")),
         h("span", { class: "rt" }, `${c.seat}${c.activity ? ", " + age(Date.now() / 1000 - c.activity) : ""}`))))
-        : h("button", { class: "idle-fold", onclick: () => ui.expand("closed") }, `${total} closed, show`)));
+        : h("button", { class: "idle-fold", dataset: { key: "closed" }, onclick: (e) => { e.currentTarget.focus({ preventScroll: true }); ui.expand("closed"); } }, `${total} closed, show`));
+    csec._key = "closed";
+    blocks.push(csec);
   }
   if (q && !blocks.length) blocks.push(h("p", { class: "hint" }, `No chat matches "${filt.value.trim()}".`));
   if (filt.parentNode !== el) el.replaceChildren(head, filt, ...blocks);
   else { for (const n of [...el.childNodes]) if (n !== filt) n.remove(); el.insertBefore(head, filt); el.append(...blocks); }
   if (hadFocus) { const n = el.querySelector(`a.nm[data-sid="${CSS.escape(hadFocus)}"]`); if (n) n.focus({ preventScroll: true }); }   // the 1.5 s refresh rebuilds the rows: the keyboard must not lose its place
+  if (el.scrollTop !== keepY) el.scrollTop = keepY;
+  if (window.scrollY !== keepWin) window.scrollTo(window.scrollX, keepWin);
+  if (foldKey != null) {
+    const g = [...el.querySelectorAll("section.group")].find((sec) => sec._key === foldKey);
+    const rows = g ? [...g.querySelectorAll("a.nm")] : [];
+    const first = rows.find((a) => a.closest("li").querySelector(".st.idle, .st.stopped")) || rows[0];
+    if (first) first.focus({ preventScroll: true });
+  }
 }
 
 // Keyboard for the Sessions list (the board window and the split view): arrows or j/k move, Enter opens and focuses the reply box,
@@ -467,5 +484,6 @@ function listKeys(e, el, ui) {
 function labelOf(graph, id) { const n = id && graph.nodes.find((x) => x.id === id); return n ? n.label : ""; }
 
 const RANK = { needs_you: 0, working: 1, idle: 2, stopped: 3 };
-function byState(a, b) { return (RANK[a.state] ?? 4) - (RANK[b.state] ?? 4) || (b.activity || 0) - (a.activity || 0); }
+const rankOf = (s) => (s.state === "idle" && s.bg_shell ? 1.5 : RANK[s.state] ?? 4);
+function byState(a, b) { return rankOf(a) - rankOf(b) || (b.activity || 0) - (a.activity || 0); }
 function score(list) { return list.reduce((t, s) => t + (s.needs_you ? 100 : 0) + (s.state === "working" ? 10 : 0), 0); }

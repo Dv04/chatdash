@@ -205,7 +205,7 @@ export async function renderSessions(el, ui) {
   const ov = (ui.overview && ui.overview()) || await get("overview").catch(() => null);   // a cold load of this page paints before the feed has arrived
   const atLimit = seatsAtLimit(ov, ui.graphData && ui.graphData());
   const rows = show.map((s) => h("tr", {},
-    h("td", {}, h("span", { class: "st " + (limitWord(s, atLimit) ? "limited" : s.state), "aria-hidden": "true" }), " ", limitWord(s, atLimit) || (s.live || s.provider ? s.state.replace("_", " ") : "not running")),
+    h("td", {}, h("span", { class: "st " + (limitWord(s, atLimit) ? "limited" : s.state + (s.state === "idle" && s.bg_shell ? " bg" : "")), "aria-hidden": "true" }), " ", limitWord(s, atLimit) || (s.live || s.provider ? (s.state.replace("_", " ") + (s.state === "idle" && s.bg_shell ? ", shell running" : "")) : "not running")),
     h("td", { class: "nm" }, h("a", { href: "#/chat/" + encodeURIComponent(s.session_id) }, s.name)),
     h("td", {}, s.provider_label || s.seat, s.excluded && h("span", { class: "hint" }, " (ro)")),
     h("td", {}, s.work_item || ""),

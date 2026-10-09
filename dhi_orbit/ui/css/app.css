@@ -759,3 +759,7 @@ dialog.palette::backdrop { background: oklch(0% 0 0 / .35); }
 .q-ctl { flex: 0 1 260px; min-width: 200px; display: grid; gap: 2px; }
 .q-range { width: 100%; margin: 0; accent-color: var(--action); }
 .q-ticks { display: flex; justify-content: space-between; font-size: var(--t-xs); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.spawn .attach-strip { display: flex; flex-wrap: wrap; gap: var(--s2); }
+/* idle prompt with a background shell still running: a blue ring with a gap around whatever the fill says (grey idle, green
+   answer ready). !important: the nebula look's .st.ready glow has a longer selector and would hide the ring. */
+.sess .st.bg, .sess-table .st.bg { box-shadow: 0 0 0 2px var(--panel, #fff), 0 0 0 4px var(--action) !important; }

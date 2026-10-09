@@ -237,8 +237,10 @@ class Collector:
         if rec is not None:
             kind = "bg" if rec.get("kind") == "bg" else "interactive"
             st = rec.get("status")
+            # "shell" is the CLI's own word for an idle prompt with a background Bash task still running
+            # (2.1.295: status = idle && running local_bash ? "shell" : status). The chat takes replies, so it is idle.
             state = {"busy": "working", "waiting": "needs_you", "idle": "idle",
-                     "shell": "working"}.get(st, st or "idle")
+                     "shell": "idle"}.get(st, st or "idle")
         elif job is not None:
             kind = "bg"
             js = job.get("state")
@@ -270,7 +272,7 @@ class Collector:
             "key": f"{acct}:{sid}", "account": acct, "config": cfg, "session_id": sid,
             "job_id": (job or {}).get("id") or (rec or {}).get("jobId"),
             "pid": (rec or {}).get("pid"), "live": rec is not None,
-            "kind": kind, "state": state, "name": name,
+            "kind": kind, "state": state, "name": name, "bg_shell": (rec or {}).get("status") == "shell",
             "waiting_for": ((job or {}).get("detail") or "waiting for you") if state == "needs_you" else None,
             "warmth": warmth, "cache_age_min": round(cache_age, 1) if cache_age is not None else None,
             "cools_in_min": round(60 - cache_age, 1) if cache_age is not None and cache_age < 60 else 0,

@@ -135,6 +135,8 @@ def decide(chat: dict, kw_on: bool, pings: int, seat: dict | None, row: dict | N
         return "skip", f"{pings} keep-warm ping(s) since the last real prompt, waiting for {need_pings}"
     if chat.get("state") != "idle":
         return "skip", f"chat is {chat.get('state')}"
+    if chat.get("bg_shell"):
+        return "skip", "a background shell is still running (its result arrives as a new turn)"
     if pinging:
         return "skip", "a keep-warm ping is in flight: decide after its reply"
     age = chat.get("cache_age_min")

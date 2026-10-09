@@ -15,17 +15,27 @@ const KIND_NOTE = {
   rule: "Apply only records your OK. No CLAUDE.md is edited by cp.",
 };
 
+// Which proposals have "Show the change" open, and their loaded diff: the board rebuilds the list on every data change
+// (and at least every 30 s), which used to close an open diff while it was being read.
+const propOpen = new Set(), propFull = new Map();
+
 export function proposalCard(p, onDone) {
+  const pid = String(p.proposal_id || p.id);
   const body = h("div", { class: "prop-body" }, h("p", { class: "hint" }, KIND_NOTE[p.proposal_kind || p.kind] || ""));
   let loaded = false;
+  const fill = (full) => body.append(full.diff ? diffView(full.diff) : h("p", { class: "final" }, full.why || ""), full.detail ? h("p", { class: "hint" }, full.detail) : "");
   const details = h("details", { class: "evidence", ontoggle: async () => {
+    if (details.open) propOpen.add(pid); else propOpen.delete(pid);
     if (!details.open || loaded) return;
     loaded = true;
+    if (propFull.has(pid)) { fill(propFull.get(pid)); return; }
     try {
-      const full = await get("proposals/" + (p.proposal_id || p.id));
-      body.append(full.diff ? diffView(full.diff) : h("p", { class: "final" }, full.why || ""), full.detail ? h("p", { class: "hint" }, full.detail) : "");
+      const full = await get("proposals/" + pid);
+      propFull.set(pid, full);
+      fill(full);
     } catch (e) { body.append(h("p", { class: "receipt none" }, `Could not load: ${e.message}`)); }
   } }, h("summary", {}, (p.proposal_kind || p.kind) === "handoff" ? "What happens" : "Show the change"), body);
+  if (propOpen.has(pid)) details.open = true;     // fires ontoggle, which fills it from the cache
   const act = async (a) => {
     try {
       const r = await post(`proposals/${p.proposal_id || p.id}/${a}`);
@@ -49,7 +59,13 @@ export function proposalCard(p, onDone) {
 
 export function renderProposals(el, ov, ui) {
   const list = (ov && ov.proposals) || [];
-  if (!list.length) { el.replaceChildren(); return; }
+  if (!list.length) { el.replaceChildren(); el._sig = ""; return; }
+  const sig = JSON.stringify(list, (k, v) => (k === "seconds" ? undefined : v));
+  if (sig === el._sig && el.firstChild) {          // same proposals: refresh the ages only, keep every open panel and scroll as is
+    el.querySelectorAll(".k-proposal .age").forEach((a, i) => { const p = list[i]; if (p) a.textContent = age(p.seconds ?? (Date.now() / 1000 - p.created_at)); });
+    return;
+  }
+  el._sig = sig;
   const open = ui.store.get("propsOpen", false);
   // one decision for the whole list; a handoff stops a running chat, so it is never part of "Apply all"
   const bulk = list.filter((p) => p.proposal_kind !== "handoff");

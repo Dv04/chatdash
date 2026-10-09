@@ -189,7 +189,8 @@ export class ChatView {
     if (!this.headSlot.contains(document.activeElement) || !this.headSlot.firstChild) this.headSlot.replaceChildren(head);
     this.moreSlot.replaceChildren(more || "");
     this.logSlot.replaceChildren(this.log,
-      s.live && s.state === "working" ? h("p", { class: "chat-working", role: "status" }, h("i", {}), h("i", {}), h("i", {}), " Claude is working") : "");
+      s.live && s.state === "working" ? h("p", { class: "chat-working", role: "status" }, h("i", {}), h("i", {}), h("i", {}), " Claude is working")
+        : s.live && s.bg_shell ? h("p", { class: "hint", role: "status" }, "Idle, a background shell is still running: replies go straight in") : "");
     this.paint();
     requestAnimationFrame(() => this.scrollTo(toBottom ? this.scrollH() : y));
     this.renderNeed();
@@ -262,13 +263,7 @@ export class ChatView {
       const f = { name: file.name || `pasted-${Date.now()}.png`, size: file.size };
       if (file.size > ATTACH_MAX) { toast(`${f.name} is over ${ATTACH_MAX / 1048576} MB`); continue; }
       a.push(f); this.paintAttach();
-      try {
-        const res = await fetch("/api/cp/uploads", { method: "POST", cache: "no-store", body: file,
-          headers: { "X-Token": TOKEN, "X-Filename": encodeURIComponent(f.name), "Content-Type": file.type || "application/octet-stream" } });
-        const d = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
-        Object.assign(f, { path: d.path, size: d.size, image: d.image });
-      } catch (e) { f.err = e.message; toast(`Not attached: ${e.message}`); }
+      try { Object.assign(f, await uploadFile(file, f.name)); } catch (e) { f.err = e.message; toast(`Not attached: ${e.message}`); }
       if (this.sid === sid) this.paintAttach();
     }
   }
@@ -280,7 +275,7 @@ export class ChatView {
     const files = a.filter((f) => f.path);
     let text = (this.reply || "").trim();
     if (!text && !files.length) return;
-    if (files.length) text += (text ? "\n\n" : "") + `Attached ${files.length === 1 ? "file" : "files"} (read ${files.length === 1 ? "it" : "them"} with your file tools):\n` + files.map((f) => f.path).join("\n");
+    if (files.length) text += (text ? "\n\n" : "") + attachNote(files);
     try {
       const r = await post(`sessions/${encodeURIComponent(this.session.session_id)}/reply`, { text, key: this.session.key });
       toast(r.queued ? "Queued: it is typed in when the chat finishes its turn" : "Sent");
@@ -314,9 +309,18 @@ function toolAsk(e) {
       : h("pre", {}, (e.input || e.summary || "").slice(0, 700)));
 }
 
-const ATTACH_MAX = 25 * 1024 * 1024;   // same cap as cp/uploads.py
-const ATTACH_ACCEPT = ".png,.jpg,.jpeg,.gif,.webp,.heic,.pdf,.txt,.md,.csv,.tsv,.json,.log,.yaml,.yml,.docx,.xlsx,.pptx";
-const fmtSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+export const ATTACH_MAX = 25 * 1024 * 1024;   // same cap as cp/uploads.py
+export const ATTACH_ACCEPT = ".png,.jpg,.jpeg,.gif,.webp,.heic,.pdf,.txt,.md,.csv,.tsv,.json,.log,.yaml,.yml,.docx,.xlsx,.pptx";
+// The text both the reply box and the new-chat dialog append for attached files: the agent reads them by path.
+export const attachNote = (files) => `Attached ${files.length === 1 ? "file" : "files"} (read ${files.length === 1 ? "it" : "them"} with your file tools):\n` + files.map((f) => f.path).join("\n");
+export async function uploadFile(file, name) {
+  const res = await fetch("/api/cp/uploads", { method: "POST", cache: "no-store", body: file,
+    headers: { "X-Token": TOKEN, "X-Filename": encodeURIComponent(name), "Content-Type": file.type || "application/octet-stream" } });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+  return { path: d.path, size: d.size, image: d.image };
+}
+export const fmtSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
 function fmtCounts(c) {
   if (!c) return "";

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dhi-orbit"
-version = "0.3.15"
+version = "0.3.16"
 description = "A local dashboard for every Claude Code, Codex, Cursor, Gemini CLI and Antigravity chat on your machine."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -40,7 +40,7 @@ chatdash-statusline = "dhi_orbit.statusline:main"
 packages = ["dhi_orbit", "dhi_orbit.providers", "dhi_orbit.cp", "dhi_orbit.cp.hooks", "chatdash", "chatdash.cp", "chatdash.cp.hooks"]
 
 [tool.setuptools.package-data]
-dhi_orbit = ["ui/*", "ui/js/*", "ui/css/*", "static/*"]
+dhi_orbit = ["ui/*", "ui/js/*", "ui/js/vendor/*", "ui/js/vendor/hljs/*", "ui/css/*", "static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

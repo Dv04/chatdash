@@ -643,6 +643,14 @@ def _handle(method: str, path: str, query: dict, body: dict, src: "sources.Sourc
             before = q1("before")
             pg = transcript.page(c["path"], int(before) if before not in (None, "") else None, int(q1("limit") or 200))
             return 200, {"session": _session_row(c, now), **pg}
+        if head == "sessions" and len(parts) == 3 and parts[2] in ("docs", "doc"):
+            # the chat's .md files (docs) and one file's text (doc?path=), for the chat view's Docs reader (cp/docs.py)
+            from . import docs
+            from ..providers import board as _prow
+            c = next((c for c in snap["chats"] if c["session_id"] == parts[1] or c["key"] == parts[1]), None)
+            if not c or _prow.is_path(c["path"]):
+                return (200, {"docs": [], "cwd": None}) if parts[2] == "docs" else (404, {"error": "no transcript for this chat"})
+            return (200, docs.list_docs(c["path"])) if parts[2] == "docs" else docs.read_doc(c["path"], q1("path") or "", q1("from"))
         if head == "suggestions":
             from . import shadow
             sid = q1("session_id")

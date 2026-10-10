@@ -7,6 +7,7 @@ import { md } from "./md.js";
 import { get, post, TOKEN } from "./api.js";
 import { micFor } from "./dictate.js";
 import { cardBody, timeoutLine } from "./cards.js";
+import { DocsDrawer, onDocLink } from "./docs.js";
 
 const PAGE = 250;
 const SHOW = { thinking: true, tools: true };
@@ -20,6 +21,15 @@ export class ChatView {
     // "N new" jump button: shown when entries arrive while you are reading further up; gone once you reach the end.
     this.jump = h("button", { class: "btn jump-new", hidden: true, onclick: () => this.toEnd() });
     window.addEventListener("scroll", () => { if (!this.jump.hidden && this.nearEnd()) this.jump.hidden = true; }, { passive: true });
+    // Docs: the .md files this chat made or named, read in a panel docked beside the chat (docs.js). The header chip is one node, kept across rebuilds.
+    this.docs = new DocsDrawer(ui);
+    this.docsChip = h("button", { class: "chip docs-chip", hidden: true, title: "Read the markdown files this chat made or named, beside the chat", onclick: () => this.docs.open() });
+  }
+  async loadDocs() {
+    const sid = this.sid, list = await this.docs.load(sid);
+    if (sid !== this.sid) return;
+    this.docsChip.hidden = !list.length;
+    this.docsChip.textContent = `Docs ${list.length}`;
   }
   sc() { return this.embedded && this.scEl && this.el.contains(this.scEl) ? this.scEl : null; }
   scrollTop() { const s = this.sc(); return s ? s.scrollTop : window.scrollY; }
@@ -54,11 +64,12 @@ export class ChatView {
     }
     this.el.classList.remove("loading");
     this.render(true);
+    this.loadDocs();
     if (this.wantFocus) { this.wantFocus = false; this.focusBox(); }
     this.timer = setInterval(() => this.poll(), 5000);
   }
 
-  close() { clearInterval(this.timer); this.timer = null; }
+  close() { clearInterval(this.timer); this.timer = null; this.docs.close(); }
 
   async poll() {
     if (document.hidden || !this.sid) return;
@@ -74,6 +85,7 @@ export class ChatView {
       this.start = keep.length ? this.start : d.start;
       this.total = d.total; this.session = d.session; this.counts = d.counts;
       this.render(atBottom);
+      this.loadDocs();
       if (!atBottom && fresh) {
         this.unseen = (this.jump.hidden ? 0 : this.unseen || 0) + fresh;
         this.jump.textContent = `${this.unseen} new \u2193`; this.jump.hidden = false;
@@ -118,6 +130,7 @@ export class ChatView {
             `cache ${s.warmth || "?"}, last call ${Math.round(s.cache_age_min)} min ago`),
           kw && kw.on && h("span", { class: "chip risk-low", title: kw.detail || "" }, `keep-warm on, ${kw.pings} pings, stops in ${kw.stop_in_h} h`),
           ro && h("span", { class: "chip ro" }, "read-only seat"),
+          this.docsChip,
           h("span", { class: "hint" }, `${this.total} entries: ${fmtCounts(this.counts)}`),
           this.embedded && h("button", { class: "btn ghost tools-toggle", title: "Thinking and tool toggles, find, keep-warm, limit resume, terminal, stop",
             onclick: () => this.pageEl.classList.toggle("tools-open") }, "Tools"))),
@@ -176,6 +189,7 @@ export class ChatView {
       this.needSlot = h("div", { class: "chat-need", hidden: true }); this.needSig = null;
       this.pageEl = h("div", { class: "page chat" }, this.headSlot, this.scEl, this.jump, this.needSlot, this.box);
       this.el.replaceChildren(this.pageEl);
+      onDocLink(this.pageEl, (p) => this.docs.open(p));   // a .md path in a message, or Read on a tool row that wrote one
       if (!ro) {   // drop files anywhere on the chat
         const files = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files");
         this.pageEl.addEventListener("dragover", (e) => { if (files(e)) { e.preventDefault(); this.pageEl.classList.add("drop"); } });
@@ -330,6 +344,8 @@ function fmtCounts(c) {
 
 function when(ts) { const t = Date.parse(ts); return isNaN(t) ? "" : ct(t / 1000, true); }
 
+const DOC_TOOLS = new Set(["Write", "Edit", "MultiEdit"]);
+
 function entry(e, who = "Claude") {
   const t = h("span", { class: "at" }, when(e.ts));
   if (e.kind === "user" && /^\s*<task-notification>/.test(e.text || "")) return taskEvent(e, t);
@@ -339,7 +355,9 @@ function entry(e, who = "Claude") {
     h("details", {}, h("summary", { class: "lbl" }, "Thinking", t, h("span", { class: "peek" }, e.redacted ? "redacted by the API" : e.text.slice(0, 140))),
       h("div", { class: "txt" }, e.redacted ? "(The API returned this thinking block encrypted; there is no text to show.)" : md(e.text, "md"))));
   if (e.kind === "tool") return h("li", { class: "e tool" + (e.error ? " err" : "") },
-    h("details", {}, h("summary", { class: "lbl" }, h("b", {}, e.name), h("span", { class: "peek mono" }, e.summary || ""), e.error && h("span", { class: "chip risk-high" }, "error"),
+    h("details", {}, h("summary", { class: "lbl" }, h("b", {}, e.name), h("span", { class: "peek mono" }, e.summary || ""),
+      DOC_TOOLS.has(e.name) && /\.md$/i.test(e.summary || "") && h("a", { class: "doc-link doc-open", "data-path": e.summary, role: "button", tabindex: "0", title: "Open this document in the reader" }, "Read"),
+      e.error && h("span", { class: "chip risk-high" }, "error"),
       e.result == null && h("span", { class: "chip" }, "no result yet"), t),
       h("div", { class: "io" }, h("div", { class: "hint" }, "Input"), h("pre", {}, e.input),
         e.result != null && [h("div", { class: "hint" }, "Result"), h("pre", {}, e.result || "(empty)")])));

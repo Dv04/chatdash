@@ -12,8 +12,9 @@ One local board for every coding-agent chat on your machine: Claude Code, Codex,
 - Reply to a chat from the page (one normal turn in that chat), stop it, or open it in Terminal. Background chats take replies too.
 - Usage limits (5-hour and 7-day) per Claude Code account, and for Codex; set up when you connect the account, never a guess.
 - A graph of accounts, chats, work items and the files they touch.
+- Read the Markdown files a chat made, or pointed you to, right beside the chat: tables, highlighted code, an outline, links between documents (see [Documents of a chat](#documents-of-a-chat)).
 - Optional WebGL "nebula" look (Settings, Look). The default look is plain and needs no GPU. Settings > Quality scales it for weaker machines.
-- Standard library only: no dependencies, no build step, no CDN. Runs on macOS, Linux and Windows (beta).
+- Python standard library only: no Python dependencies, no build step, no CDN. The documents reader ships three small browser libraries in the package (marked, DOMPurify, highlight.js; their licences are in `dhi_orbit/ui/js/vendor`). Runs on macOS, Linux and Windows (beta).
 
 Viewing costs zero model tokens: DHI Orbit only reads files. A reply you send is one normal turn in that chat.
 
@@ -220,6 +221,23 @@ Put a file `agents.json` in the data folder (next to `config.json`) describing t
 - A mistake in the file never stops the board: it shows as a health note ("agents.json: ...") and the other entries still load.
   The ids `claude`, `codex`, `cursor`, `gemini`, `antigravity` and `main` are taken.
 
+## Documents of a chat
+
+Agents often finish with "the full write-up is in docs/X.md". In a chat, the **Docs N** button opens those files in a panel
+on the right, rendered as GitHub-flavoured Markdown: headings, tables, task lists, highlighted code with a Copy button, and an
+outline of the headings that follows your scroll.
+
+- The list has two groups: files the chat **made** (written or edited with a file tool, or created by a shell command such as
+  `> file.md` or `tee`) and files it **named** in a message that exist on disk. Subagents' files count for their chat.
+- A `.md` path in any message is clickable and opens in the panel; so does Read on a tool call that wrote one. A link from one of
+  the chat's documents to another `.md` file opens there too (one hop).
+- On a wide screen the page moves over to make room, so the chat stays readable; drag the panel's edge to resize it. On a narrow
+  window it slides over the page, and on a phone it is a full-screen sheet.
+- An open document re-reads itself when the chat edits the file. Switch files with the name menu (it has a filter) or `[` and `]`.
+
+The panel only opens `.md` files under your home folder that the chat made, named, or links to; `~/.secrets` and `~/.ssh` are
+never served. A file a script writes some other way (for example from Python) is not listed.
+
 ## How a reply is delivered
 
 | Chat | Route |
@@ -326,6 +344,9 @@ These are the versions run before each release. Use them for the smoothest exper
 | Linux | Ubuntu 22.04.5 LTS (x86_64, kernel 6.8), Python 3.10.12 | the full test suite (324 passed) and `dhi-orbit --help` from a fresh virtual environment; no live Claude Code session was run there |
 | Gemini CLI, Antigravity (`agy`) | 0.63.0, 1.3.1 | the readers against the tools' own source and a real `agy` 1.3.1 conversation (list, transcript, reply) on macOS; not run on Windows or Linux with a real install, and Gemini CLI not run with a signed-in chat |
 | Claude Code | 2.1.292 | `claude agents --json`, `claude --version`, the board and replies up to the sign-in step |
+
+The documents reader (0.3.16) was run on macOS only: its Windows path handling (`C:\` paths, backslashes) is covered by tests,
+not yet by a Windows or Linux run.
 
 Python 3.10 or newer is required. The suite on Windows was last run before the Gemini, Antigravity and `agents.json` readers were added; for those, Windows behaviour (paths, `file:///C:/` folders, `.cmd` shims) is checked against the tools' documentation and by tests, not by a Windows run.
 

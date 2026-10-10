@@ -1,0 +1,1 @@
+Vendored 2026-10-10 for the Docs reader (docs.js): marked 15.0.12, DOMPurify 3.2.6, highlight.js 11.11.1 (lib/core.js with module.exports turned into export default; es/languages as shipped). From npm pack; no network at run time.

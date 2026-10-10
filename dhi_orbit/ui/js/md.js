@@ -1,16 +1,20 @@
 // Markdown for Claude's messages: the subset chats actually use (paragraphs, **bold**, *italic*, `code`, fenced
 // code, headings, lists, tables, quotes, rules, links). Builds DOM nodes, never innerHTML, so a transcript can never
-// inject markup; links open only for http(s).
+// inject markup; links open only for http(s). A path to a .md file (absolute, ~/, or relative inside `code`) becomes a
+// .doc-link: the chat view opens it in its Docs reader (docs.js); anywhere else it is plain text with a dotted underline.
 import { h } from "./lib.js";
 
-const INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|\*\*([^*]+(?:\*(?!\*)[^*]*)*)\*\*|__([^_]+)__|~~([^~]+)~~|\*([^*\s][^*]*?)\*|(?<![\w])_([^_\s][^_]*?)_(?![\w])|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/g;
+const DOC_PATH = /^(?:~\/|\/|\.{0,2}\/?)?[\w.@+\-\/]*\.md(?::\d+)?$/;
+const docLink = (path, kid) => h("a", { class: "doc-link", "data-path": path, role: "button", tabindex: "0", title: `Open ${path} in the reader` }, kid);
+
+const INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|\*\*([^*]+(?:\*(?!\*)[^*]*)*)\*\*|__([^_]+)__|~~([^~]+)~~|\*([^*\s][^*]*?)\*|(?<![\w])_([^_\s][^_]*?)_(?![\w])|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|(?<![\w\/.~])((?:~\/|\/)[\w.@+\-\/]*\.md(?::\d+)?)(?![\w\/])/g;
 
 export function inline(text) {
   const out = [], re = new RegExp(INLINE.source, "g");      // own regex per call: inline() recurses for **x**
   let last = 0, m;
   while ((m = re.exec(text))) {
     if (m.index > last) out.push(text.slice(last, m.index));
-    if (m[2] != null) out.push(h("code", {}, m[2]));
+    if (m[2] != null) out.push(DOC_PATH.test(m[2].trim()) ? docLink(m[2].trim(), h("code", {}, m[2])) : h("code", {}, m[2]));
     else if (m[3] != null) out.push(h("strong", {}, inline(m[3])));
     else if (m[4] != null) out.push(h("strong", {}, inline(m[4])));
     else if (m[5] != null) out.push(h("del", {}, inline(m[5])));
@@ -18,6 +22,7 @@ export function inline(text) {
     else if (m[7] != null) out.push(h("em", {}, inline(m[7])));
     else if (m[8] != null) out.push(h("a", { href: m[9], target: "_blank", rel: "noopener noreferrer" }, inline(m[8])));
     else if (m[10] != null) out.push(h("a", { href: m[10], target: "_blank", rel: "noopener noreferrer" }, m[10]));
+    else if (m[11] != null) out.push(docLink(m[11], m[11]));
     last = re.lastIndex;
   }
   if (last < text.length) out.push(text.slice(last));
@@ -27,7 +32,8 @@ export function inline(text) {
 const LIST = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 const cells = (l) => l.trim().replace(/^\||\|$/g, "").split(/(?<!\\)\|/).map((c) => c.trim());
 
-export function md(text, cls = "md") {
+// opts.headings: real heading levels (# -> h2 ... ) for a document; chat messages keep the small h4/h5.
+export function md(text, cls = "md", opts = {}) {
   const root = h("div", { class: cls });
   const lines = String(text || "").replace(/\r\n?/g, "\n").split("\n");
   let i = 0, para = [];
@@ -51,7 +57,7 @@ export function md(text, cls = "md") {
     }
     if (!l.trim()) { flush(); i++; continue; }
     const hd = l.match(/^(#{1,6})\s+(.*)$/);
-    if (hd) { flush(); root.append(h(hd[1].length <= 2 ? "h4" : "h5", {}, inline(hd[2].replace(/\s#+\s*$/, "")))); i++; continue; }
+    if (hd) { flush(); root.append(h(opts.headings ? "h" + Math.min(6, hd[1].length + 1) : hd[1].length <= 2 ? "h4" : "h5", {}, inline(hd[2].replace(/\s#+\s*$/, "")))); i++; continue; }
     if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)) { flush(); root.append(h("hr", {})); i++; continue; }
     if (/^\s*\|.*\|\s*$/.test(l) && i + 1 < lines.length && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(lines[i + 1])) {
       flush();
@@ -68,7 +74,7 @@ export function md(text, cls = "md") {
       flush();
       const q = [];
       while (i < lines.length && /^\s*>/.test(lines[i])) q.push(lines[i++].replace(/^\s*>\s?/, ""));
-      root.append(h("blockquote", {}, md(q.join("\n"), "md-q")));
+      root.append(h("blockquote", {}, md(q.join("\n"), "md-q", opts)));
       continue;
     }
     if (LIST.test(l)) {
